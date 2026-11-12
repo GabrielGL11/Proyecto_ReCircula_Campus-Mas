@@ -1,0 +1,36 @@
+﻿@"
+# compilado
+/dist
+/node_modules
+/build
+
+# logs
+logs
+*.log
+npm-debug.log*
+
+# pruebas
+/coverage
+/.nyc_output
+
+# sistema
+.DS_Store
+
+# editores
+/.idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# variables de entorno (nunca subir claves)
+.env
+.env.*.local
+.env.local
+
+# temporales
+.temp
+.tmp
+# cache de TypeScript
+*.tsbuildinfo
