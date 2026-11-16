@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
-import { CATEGORIAS, listarRecursos, publicarRecurso, type Recurso } from './api.ts'
+import { CATEGORIAS, listarRecursos, publicarRecurso, type Filtros, type Recurso } from './api.ts'
 
 const etiquetaCategoria = (valor: string) =>
   CATEGORIAS.find((c) => c.valor === valor)?.etiqueta ?? valor
@@ -10,17 +10,25 @@ export default function App() {
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
 
+  // Formulario de publicación (HU-01)
   const [nombre, setNombre] = useState('')
   const [categoria, setCategoria] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [errores, setErrores] = useState<string[]>([])
   const [confirmacion, setConfirmacion] = useState<string | null>(null)
 
-  async function cargar() {
+  // Filtros de búsqueda (HU-02)
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
+  const [errorFiltro, setErrorFiltro] = useState<string | null>(null)
+  const [filtrosActivos, setFiltrosActivos] = useState(false)
+
+  async function cargar(filtros: Filtros = {}) {
     setCargando(true)
     setErrorCatalogo(null)
     try {
-      setRecursos(await listarRecursos())
+      setRecursos(await listarRecursos(filtros))
     } catch {
       setErrorCatalogo('No se pudo cargar el catálogo. Revisa que la API esté encendida.')
     } finally {
@@ -38,25 +46,47 @@ export default function App() {
     setErrores([])
     setConfirmacion(null)
     try {
-      // Criterio (a): se guarda y aparece "disponible".
       const nuevo = await publicarRecurso({ nombre, categoria, propietarioId: 1 })
       setConfirmacion(`«${nuevo.nombre}» se publicó y ya aparece como disponible.`)
       setNombre('')
       setCategoria('')
-      await cargar()
+      await cargar(filtrosActivos ? { categoria: filtroCategoria, desde, hasta } : {})
     } catch (err) {
-      // Criterio (b) + RNF-02: muestra el error y conserva lo escrito.
       setErrores(Array.isArray(err) ? (err as string[]) : ['No se pudo publicar el recurso.'])
     } finally {
       setEnviando(false)
     }
   }
 
+  async function buscar(e: FormEvent) {
+    e.preventDefault()
+    setErrorFiltro(null)
+    if ((desde && !hasta) || (!desde && hasta)) {
+      setErrorFiltro('Indica la fecha inicial y la final.')
+      return
+    }
+    if (desde && hasta && hasta < desde) {
+      setErrorFiltro('La fecha final no puede ser anterior a la inicial.')
+      return
+    }
+    setFiltrosActivos(Boolean(filtroCategoria || desde))
+    await cargar({ categoria: filtroCategoria, desde, hasta })
+  }
+
+  async function limpiar() {
+    setFiltroCategoria('')
+    setDesde('')
+    setHasta('')
+    setErrorFiltro(null)
+    setFiltrosActivos(false)
+    await cargar()
+  }
+
   return (
     <main className="pagina">
       <header>
         <h1>ReCircula Campus</h1>
-        <p>Publica los recursos tecnológicos que puedes compartir.</p>
+        <p>Publica y encuentra recursos tecnológicos del campus.</p>
       </header>
 
       <section aria-labelledby="titulo-form">
@@ -114,6 +144,40 @@ export default function App() {
       <section aria-labelledby="titulo-catalogo">
         <h2 id="titulo-catalogo">Catálogo</h2>
 
+        <form onSubmit={buscar} noValidate className="filtros">
+          <div className="campo">
+            <label htmlFor="filtro-categoria">Categoría</label>
+            <select id="filtro-categoria" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+              <option value="">Todas</option>
+              {CATEGORIAS.map((c) => (
+                <option key={c.valor} value={c.valor}>
+                  {c.etiqueta}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="desde">Desde</label>
+            <input id="desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </div>
+          <div className="campo">
+            <label htmlFor="hasta">Hasta</label>
+            <input id="hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </div>
+          <div className="acciones">
+            <button type="submit">Buscar</button>
+            <button type="button" className="secundario" onClick={() => void limpiar()}>
+              Limpiar
+            </button>
+          </div>
+        </form>
+
+        {errorFiltro && (
+          <div role="alert" className="mensaje error">
+            {errorFiltro}
+          </div>
+        )}
+
         {cargando && <p role="status">Cargando catálogo…</p>}
 
         {errorCatalogo && (
@@ -126,7 +190,11 @@ export default function App() {
         )}
 
         {!cargando && !errorCatalogo && recursos.length === 0 && (
-          <p className="vacio">Aún no hay recursos publicados. Publica el primero con el formulario.</p>
+          <p className="vacio">
+            {filtrosActivos
+              ? 'Sin resultados: no hay recursos disponibles con esos filtros. Prueba otras fechas o categoría.'
+              : 'Aún no hay recursos publicados. Publica el primero con el formulario.'}
+          </p>
         )}
 
         {!cargando && !errorCatalogo && recursos.length > 0 && (
