@@ -11,8 +11,8 @@ Software 5° "B", ULEAM. Se trabaja con Kanban y XP.
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `api/` | Backend: NestJS (ESM) + Vitest | Módulo `recursos` (HU-01), datos en memoria |
-| `web/` | Frontend: Vite + React + TypeScript | Formulario y catálogo de recursos (HU-01) |
+| `api/` | Backend: NestJS (ESM) + Vitest | Módulo `recursos` (HU-01 y HU-02), datos en memoria |
+| `web/` | Frontend: Vite + React + TypeScript | Formulario, catálogo y búsqueda por categoría/fechas (HU-01 y HU-02) |
 | `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente |
 
 Tecnologías previstas, aún sin instalar: TypeORM + PostgreSQL y JWT en `api/`,
@@ -32,7 +32,8 @@ React Router en `web/`.
 cd api
 npm install
 npm run start:dev   # http://localhost:4200
-npm test            # pruebas con Vitest
+npm test            # pruebas unitarias con Vitest
+npm run test:e2e    # pruebas HTTP de los controladores (supertest)
 ```
 
 ### Frontend (`web/`)
@@ -44,15 +45,22 @@ npm run dev         # http://localhost:5173
 npm run build       # compilación de producción
 ```
 
-## API (HU-01)
+## API (HU-01 y HU-02)
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/recursos` | Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible". |
-| GET | `/recursos` | Lista el catálogo. Filtros opcionales (HU-02): `categoria`, `desde` y `hasta` (AAAA-MM-DD); con fechas excluye recursos con préstamo confirmado en ese rango. |
+| POST | `/recursos` | Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible". Un body inválido (campos de otro tipo, ausente, categoría desconocida) responde 400 con la lista de errores. |
+| GET | `/recursos` | Lista el catálogo. Filtros opcionales (HU-02): `categoria`, `desde` y `hasta` (AAAA-MM-DD). Con fechas busca disponibilidad: excluye recursos averiados y los que tienen un préstamo confirmado que se cruza con el rango. `desde` no puede ser anterior a hoy (hora de Ecuador). |
+| GET | `/categorias` | Categorías válidas (`valor` y `etiqueta`). Es la única fuente: el frontend no las duplica. |
 
 El frontend usa un proxy de Vite: las llamadas a `/api/*` van a `http://localhost:4200`.
 Por ahora los datos se guardan en memoria y se pierden al reiniciar la API.
+
+## Deuda técnica
+
+- **`propietarioId` lo manda el cliente** (el frontend lo fija en 1). Es inseguro: cuando se
+  implemente JWT, el propietario debe salir del token y quitarse del body. Está marcado con
+  `TODO(JWT)` en el código.
 
 ## Tablero Kanban
 
@@ -86,6 +94,6 @@ historia separada y quedó absorbida por HU-11).
 - [x] Tablero Kanban público con 10 historias en Backlog
 - [x] Proyectos base de NestJS y Vite + React funcionando
 - [ ] HU-01: publicar recurso (en revisión; datos en memoria)
-- [ ] HU-02: consultar disponibilidad por categoría y fechas
+- [ ] HU-02: consultar disponibilidad por categoría y fechas (en revisión; datos en memoria)
 - [ ] Integración continua con GitHub Actions
 - [ ] Conexión a PostgreSQL con TypeORM
