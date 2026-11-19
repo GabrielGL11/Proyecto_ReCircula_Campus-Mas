@@ -1,10 +1,17 @@
-export const CATEGORIAS = [
-  { valor: 'calculadora', etiqueta: 'Calculadora' },
-  { valor: 'cable', etiqueta: 'Cable' },
-  { valor: 'periferico', etiqueta: 'Periférico (ratón, teclado…)' },
-  { valor: 'kit-laboratorio', etiqueta: 'Kit de laboratorio' },
-  { valor: 'otro', etiqueta: 'Otro' },
-] as const
+// Las categorías las define la API (GET /categorias): aquí no se duplican.
+export interface Categoria {
+  valor: string
+  etiqueta: string
+}
+
+export async function listarCategorias(): Promise<Categoria[]> {
+  const res = await fetch('/api/categorias')
+  if (!res.ok) throw await leerError(res)
+  return res.json()
+}
+
+// Hoy (AAAA-MM-DD) según la hora de Ecuador, para bloquear fechas pasadas en el calendario.
+export const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date())
 
 export interface Recurso {
   id: number
@@ -41,6 +48,8 @@ export async function listarRecursos(filtros: Filtros = {}): Promise<Recurso[]> 
   return res.json()
 }
 
+// TODO(JWT): cuando haya autenticación, el propietario lo deduce la API del token
+// y `propietarioId` deja de enviarse desde aquí.
 export async function publicarRecurso(datos: {
   nombre: string
   categoria: string

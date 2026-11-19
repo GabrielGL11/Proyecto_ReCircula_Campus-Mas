@@ -1,11 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
-import { CATEGORIAS, listarRecursos, publicarRecurso, type Filtros, type Recurso } from './api.ts'
-
-const etiquetaCategoria = (valor: string) =>
-  CATEGORIAS.find((c) => c.valor === valor)?.etiqueta ?? valor
+import {
+  hoy,
+  listarCategorias,
+  listarRecursos,
+  publicarRecurso,
+  type Categoria,
+  type Filtros,
+  type Recurso,
+} from './api.ts'
 
 export default function App() {
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  const etiquetaCategoria = (valor: string) => categorias.find((c) => c.valor === valor)?.etiqueta ?? valor
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
@@ -24,20 +31,29 @@ export default function App() {
   const [errorFiltro, setErrorFiltro] = useState<string | null>(null)
   const [filtrosActivos, setFiltrosActivos] = useState(false)
 
+  // Número de la última petición enviada. Si llega una respuesta de una petición
+  // anterior (porque el usuario pulsó Buscar dos veces seguidas), se ignora.
+  const ultimaPeticion = useRef(0)
+
   async function cargar(filtros: Filtros = {}) {
+    const miPeticion = ++ultimaPeticion.current
+    const vigente = () => miPeticion === ultimaPeticion.current
     setCargando(true)
     setErrorCatalogo(null)
     try {
-      setRecursos(await listarRecursos(filtros))
+      const datos = await listarRecursos(filtros)
+      if (vigente()) setRecursos(datos)
     } catch {
-      setErrorCatalogo('No se pudo cargar el catálogo. Revisa que la API esté encendida.')
+      if (vigente()) setErrorCatalogo('No se pudo cargar el catálogo. Revisa que la API esté encendida.')
     } finally {
-      setCargando(false)
+      if (vigente()) setCargando(false)
     }
   }
 
   useEffect(() => {
     void cargar()
+    // Si falla, el catálogo ya avisa de que la API no responde.
+    listarCategorias().then(setCategorias, () => setCategorias([]))
   }, [])
 
   async function enviar(e: FormEvent) {
@@ -46,6 +62,7 @@ export default function App() {
     setErrores([])
     setConfirmacion(null)
     try {
+      // TODO(JWT): el propietario saldrá del token; por ahora se fija en 1.
       const nuevo = await publicarRecurso({ nombre, categoria, propietarioId: 1 })
       setConfirmacion(`«${nuevo.nombre}» se publicó y ya aparece como disponible.`)
       setNombre('')
@@ -67,6 +84,10 @@ export default function App() {
     }
     if (desde && hasta && hasta < desde) {
       setErrorFiltro('La fecha final no puede ser anterior a la inicial.')
+      return
+    }
+    if (desde && desde < hoy()) {
+      setErrorFiltro('La fecha inicial no puede ser anterior a hoy.')
       return
     }
     setFiltrosActivos(Boolean(filtroCategoria || desde))
@@ -112,7 +133,7 @@ export default function App() {
               aria-invalid={errores.length > 0 && !categoria}
             >
               <option value="">Selecciona una categoría</option>
-              {CATEGORIAS.map((c) => (
+              {categorias.map((c) => (
                 <option key={c.valor} value={c.valor}>
                   {c.etiqueta}
                 </option>
@@ -149,7 +170,7 @@ export default function App() {
             <label htmlFor="filtro-categoria">Categoría</label>
             <select id="filtro-categoria" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
               <option value="">Todas</option>
-              {CATEGORIAS.map((c) => (
+              {categorias.map((c) => (
                 <option key={c.valor} value={c.valor}>
                   {c.etiqueta}
                 </option>
@@ -158,11 +179,11 @@ export default function App() {
           </div>
           <div className="campo">
             <label htmlFor="desde">Desde</label>
-            <input id="desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+            <input id="desde" type="date" min={hoy()} value={desde} onChange={(e) => setDesde(e.target.value)} />
           </div>
           <div className="campo">
             <label htmlFor="hasta">Hasta</label>
-            <input id="hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+            <input id="hasta" type="date" min={desde || hoy()} value={hasta} onChange={(e) => setHasta(e.target.value)} />
           </div>
           <div className="acciones">
             <button type="submit">Buscar</button>
