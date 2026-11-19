@@ -38,7 +38,7 @@ describe('Recursos (e2e)', () => {
         .send({ nombre: 'Casio fx-991', categoria: 'calculadora', propietarioId: 1 })
         .expect(201);
 
-      expect(res.body).toMatchObject({ nombre: 'Casio fx-991', categoria: 'calculadora', estado: 'disponible' });
+      expect(res.body).toMatchObject({ nombre: 'Casio fx-991', categoria: 'calculadora', estado: 'disponible', creadoEn: '2026-11-19' });
       const lista = await request(app.getHttpServer()).get('/recursos').expect(200);
       expect(lista.body).toHaveLength(1);
     });
@@ -86,9 +86,17 @@ describe('Recursos (e2e)', () => {
       await request(app.getHttpServer()).get('/recursos?desde=22/11/2026&hasta=23/11/2026').expect(400);
     });
 
-    it('responde 400 si la fecha inicial es anterior a hoy', async () => {
-      const res = await request(app.getHttpServer()).get('/recursos?desde=2026-11-18&hasta=2026-11-20').expect(400);
-      expect(res.body.message).toContain('La fecha inicial no puede ser anterior a hoy.');
+    it('devuelve lista vacía (no error) si el rango es anterior a la creación del recurso', async () => {
+      servicio.crear({ nombre: 'Casio', categoria: 'calculadora' }); // creado el 2026-11-19
+
+      const res = await request(app.getHttpServer()).get('/recursos?desde=2026-11-12&hasta=2026-11-17').expect(200);
+
+      expect(res.body).toEqual([]);
+    });
+
+    it('responde 400 si la fecha final es anterior a la inicial', async () => {
+      const res = await request(app.getHttpServer()).get('/recursos?desde=2026-11-22&hasta=2026-11-20').expect(400);
+      expect(res.body.message).toContain('La fecha final no puede ser anterior a la inicial.');
     });
   });
 

@@ -59,21 +59,25 @@ export class RecursosService {
       categoria,
       estado: 'disponible',
       propietarioId: propietario,
+      creadoEn: hoy(),
     };
     this.recursos.push(recurso);
     return recurso;
   }
 
   // HU-02: sin filtros devuelve todo el catálogo (cada recurso con su estado).
-  // Con fechas busca disponibilidad: solo recursos en estado "disponible" (no averiados)
-  // y sin préstamo confirmado que se cruce con el rango.
+  // Con fechas busca disponibilidad: solo recursos que ya existían al empezar el rango
+  // (creadoEn <= desde), en estado "disponible" (no averiados) y sin préstamo confirmado
+  // que se cruce con el rango.
   listar(filtros: FiltrosRecursos = {}): Recurso[] {
     const rango = this.leerRango(filtros);
     return this.recursos.filter(
       (r) =>
         (!filtros.categoria || r.categoria === filtros.categoria) &&
         (!rango ||
-          (r.estado === 'disponible' && !this.ocupaciones.some((o) => o.recursoId === r.id && seSuperpone(o.rango, rango)))),
+          (r.creadoEn <= rango.inicio &&
+            r.estado === 'disponible' &&
+            !this.ocupaciones.some((o) => o.recursoId === r.id && seSuperpone(o.rango, rango)))),
     );
   }
 
@@ -96,8 +100,6 @@ export class RecursosService {
     const valida = (f: string) => FECHA_ISO.test(f) && !Number.isNaN(Date.parse(f));
     if (!valida(desde) || !valida(hasta)) throw new BadRequestException(['Las fechas no son válidas (usa AAAA-MM-DD).']);
     if (hasta < desde) throw new BadRequestException(['La fecha final no puede ser anterior a la inicial.']);
-    // Solo se puede consultar desde hoy en adelante (hoy incluido).
-    if (desde < hoy()) throw new BadRequestException(['La fecha inicial no puede ser anterior a hoy.']);
     return { inicio: desde, fin: hasta };
   }
 }

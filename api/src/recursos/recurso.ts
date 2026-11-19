@@ -27,6 +27,8 @@ export interface Recurso {
   categoria: Categoria;
   estado: EstadoRecurso;
   propietarioId: number;
+  // Día en que se publicó (AAAA-MM-DD, hora de Ecuador). Antes de esa fecha el recurso no existía.
+  creadoEn: string;
 }
 
 // Lo que llega en el body del POST. Los campos son `unknown` porque el cliente

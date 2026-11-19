@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
 import {
-  hoy,
   listarCategorias,
   listarRecursos,
   publicarRecurso,
@@ -84,10 +83,6 @@ export default function App() {
     }
     if (desde && hasta && hasta < desde) {
       setErrorFiltro('La fecha final no puede ser anterior a la inicial.')
-      return
-    }
-    if (desde && desde < hoy()) {
-      setErrorFiltro('La fecha inicial no puede ser anterior a hoy.')
       return
     }
     setFiltrosActivos(Boolean(filtroCategoria || desde))
@@ -179,11 +174,11 @@ export default function App() {
           </div>
           <div className="campo">
             <label htmlFor="desde">Desde</label>
-            <input id="desde" type="date" min={hoy()} value={desde} onChange={(e) => setDesde(e.target.value)} />
+            <input id="desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
           </div>
           <div className="campo">
             <label htmlFor="hasta">Hasta</label>
-            <input id="hasta" type="date" min={desde || hoy()} value={hasta} onChange={(e) => setHasta(e.target.value)} />
+            <input id="hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
           </div>
           <div className="acciones">
             <button type="submit">Buscar</button>
@@ -210,7 +205,7 @@ export default function App() {
           </div>
         )}
 
-        {!cargando && !errorCatalogo && recursos.length === 0 && (
+        {!cargando && !errorCatalogo && !errorFiltro && recursos.length === 0 && (
           <p className="vacio">
             {filtrosActivos
               ? 'Sin resultados: no hay recursos disponibles con esos filtros. Prueba otras fechas o categoría.'
@@ -218,7 +213,7 @@ export default function App() {
           </p>
         )}
 
-        {!cargando && !errorCatalogo && recursos.length > 0 && (
+        {!cargando && !errorCatalogo && !errorFiltro && recursos.length > 0 && (
           <ul className="catalogo">
             {recursos.map((r) => (
               <li key={r.id}>

@@ -10,15 +10,13 @@ export async function listarCategorias(): Promise<Categoria[]> {
   return res.json()
 }
 
-// Hoy (AAAA-MM-DD) según la hora de Ecuador, para bloquear fechas pasadas en el calendario.
-export const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date())
-
 export interface Recurso {
   id: number
   nombre: string
   categoria: string
   estado: 'disponible' | 'averiado'
   propietarioId: number
+  creadoEn: string
 }
 
 async function leerError(res: Response): Promise<string[]> {

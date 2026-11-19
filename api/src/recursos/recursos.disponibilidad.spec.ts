@@ -78,20 +78,38 @@ describe('RecursosService: consultar disponibilidad (HU-02)', () => {
     expect(() => service.listar({ desde: '2026-11-25', hasta: '2026-11-20' })).toThrow(BadRequestException);
   });
 
-  it('rechaza una fecha inicial anterior a hoy', () => {
-    expect(() => service.listar({ desde: '2026-11-18', hasta: '2026-11-20' })).toThrow(BadRequestException);
+  // Un recurso no puede estar disponible antes del día en que se publicó.
+  it('el recurso guarda el día en que se creó', () => {
+    expect(service.crear({ nombre: 'Casio', categoria: 'calculadora' }).creadoEn).toBe('2026-11-19');
   });
 
-  it('acepta una fecha inicial igual a hoy', () => {
-    const recurso = service.crear({ nombre: 'Casio', categoria: 'calculadora', propietarioId: 1 });
-    expect(service.listar({ desde: '2026-11-19', hasta: '2026-11-19' })).toEqual([recurso]);
-  });
-
-  it('usa la fecha de Ecuador y no la del servidor (UTC)', () => {
+  it('la fecha de creación usa la hora de Ecuador y no la del servidor (UTC)', () => {
     // 2026-11-20 02:00 UTC = 2026-11-19 21:00 en Ecuador: todavía es 19.
     vi.setSystemTime(new Date('2026-11-20T02:00:00Z'));
-    expect(() => service.listar({ desde: '2026-11-19', hasta: '2026-11-19' })).not.toThrow();
-    expect(() => service.listar({ desde: '2026-11-18', hasta: '2026-11-19' })).toThrow(BadRequestException);
+    expect(service.crear({ nombre: 'Casio', categoria: 'calculadora' }).creadoEn).toBe('2026-11-19');
+  });
+
+  it('no devuelve un recurso en fechas anteriores al día en que se creó', () => {
+    service.crear({ nombre: 'Casio', categoria: 'calculadora' }); // creado el 2026-11-19
+
+    expect(service.listar({ desde: '2026-11-12', hasta: '2026-11-17' })).toEqual([]);
+  });
+
+  it('lo devuelve desde el día en que se creó en adelante', () => {
+    const recurso = service.crear({ nombre: 'Casio', categoria: 'calculadora' });
+
+    expect(service.listar({ desde: '2026-11-19', hasta: '2026-11-19' })).toEqual([recurso]);
+    expect(service.listar({ desde: '2026-11-20', hasta: '2026-11-22' })).toEqual([recurso]);
+  });
+
+  it('si el rango empieza antes de su creación no lo devuelve (tendría que existir todo el rango)', () => {
+    service.crear({ nombre: 'Casio', categoria: 'calculadora' });
+
+    expect(service.listar({ desde: '2026-11-18', hasta: '2026-11-20' })).toEqual([]);
+  });
+
+  it('acepta fechas pasadas: devuelve lista vacía, no error', () => {
+    expect(() => service.listar({ desde: '2020-01-01', hasta: '2020-01-05' })).not.toThrow();
   });
 
   it('rechaza si falta una de las dos fechas', () => {
