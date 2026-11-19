@@ -49,7 +49,7 @@ npm run build       # compilación de producción
 | Método | Ruta | Descripción |
 |---|---|---|
 | POST | `/recursos` | Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible". |
-| GET | `/recursos` | Lista el catálogo. |
+| GET | `/recursos` | Lista el catálogo. Filtros opcionales (HU-02): `categoria`, `desde` y `hasta` (AAAA-MM-DD); con fechas excluye recursos con préstamo confirmado en ese rango. |
 
 El frontend usa un proxy de Vite: las llamadas a `/api/*` van a `http://localhost:4200`.
 Por ahora los datos se guardan en memoria y se pierden al reiniciar la API.
@@ -86,5 +86,6 @@ historia separada y quedó absorbida por HU-11).
 - [x] Tablero Kanban público con 10 historias en Backlog
 - [x] Proyectos base de NestJS y Vite + React funcionando
 - [ ] HU-01: publicar recurso (en revisión; datos en memoria)
+- [ ] HU-02: consultar disponibilidad por categoría y fechas
 - [ ] Integración continua con GitHub Actions
 - [ ] Conexión a PostgreSQL con TypeORM

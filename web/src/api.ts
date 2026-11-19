@@ -24,8 +24,19 @@ async function leerError(res: Response): Promise<string[]> {
   }
 }
 
-export async function listarRecursos(): Promise<Recurso[]> {
-  const res = await fetch('/api/recursos')
+export interface Filtros {
+  categoria?: string
+  desde?: string
+  hasta?: string
+}
+
+export async function listarRecursos(filtros: Filtros = {}): Promise<Recurso[]> {
+  const params = new URLSearchParams()
+  if (filtros.categoria) params.set('categoria', filtros.categoria)
+  if (filtros.desde) params.set('desde', filtros.desde)
+  if (filtros.hasta) params.set('hasta', filtros.hasta)
+  const consulta = params.toString()
+  const res = await fetch(`/api/recursos${consulta ? `?${consulta}` : ''}`)
   if (!res.ok) throw await leerError(res)
   return res.json()
 }
