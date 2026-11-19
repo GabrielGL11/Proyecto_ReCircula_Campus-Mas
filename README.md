@@ -50,8 +50,7 @@ npm run build       # compilación de producción
 | Método | Ruta | Descripción |
 |---|---|---|
 | POST | `/recursos` | Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible". Un body inválido (campos de otro tipo, ausente, categoría desconocida) responde 400 con la lista de errores. |
-| GET | `/recursos` | Lista el catálogo. Filtros opcionales (HU-02): `categoria`, `desde` y `hasta` (AAAA-MM-DD). Con fechas busca disponibilidad: excluye recursos averiados y los que tienen un préstamo confirmado que se cruza con el rango. Cada recurso guarda el día en que se creó (`creadoEn`, hora de Ecuador) y no aparece en búsquedas cuyo rango empieza antes de esa fecha (devuelve lista vacía, no error). |
-| GET | `/categorias` | Categorías válidas (`valor` y `etiqueta`). Es la única fuente: el frontend no las duplica. |
+| GET | `/recursos` | Lista el catálogo. Filtros opcionales (HU-02): `categoria`, `desde` y `hasta` (AAAA-MM-DD); con fechas excluye recursos con préstamo confirmado en ese rango. |
 
 El frontend usa un proxy de Vite: las llamadas a `/api/*` van a `http://localhost:4200`.
 Por ahora los datos se guardan en memoria y se pierden al reiniciar la API.

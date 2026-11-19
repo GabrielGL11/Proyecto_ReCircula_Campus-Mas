@@ -1,7 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { esCategoria, type CrearRecursoDto, type EstadoRecurso, type Recurso } from './recurso.js';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { esCategoria, type CrearRecursoDto, type Recurso } from './recurso.js';
 import { seSuperpone, type Rango } from './rango.js';
-import { hoy } from './fecha.js';
 
 export interface FiltrosRecursos {
   categoria?: string;
@@ -59,39 +58,24 @@ export class RecursosService {
       categoria,
       estado: 'disponible',
       propietarioId: propietario,
-      creadoEn: hoy(),
     };
     this.recursos.push(recurso);
     return recurso;
   }
 
-  // HU-02: sin filtros devuelve todo el catálogo (cada recurso con su estado).
-  // Con fechas busca disponibilidad: solo recursos que ya existían al empezar el rango
-  // (creadoEn <= desde), en estado "disponible" (no averiados) y sin préstamo confirmado
-  // que se cruce con el rango.
+  // HU-02: sin filtros devuelve todo el catálogo; con fechas, solo los recursos sin préstamo confirmado en ese rango.
   listar(filtros: FiltrosRecursos = {}): Recurso[] {
     const rango = this.leerRango(filtros);
     return this.recursos.filter(
       (r) =>
         (!filtros.categoria || r.categoria === filtros.categoria) &&
-        (!rango ||
-          (r.creadoEn <= rango.inicio &&
-            r.estado === 'disponible' &&
-            !this.ocupaciones.some((o) => o.recursoId === r.id && seSuperpone(o.rango, rango)))),
+        (!rango || !this.ocupaciones.some((o) => o.recursoId === r.id && seSuperpone(o.rango, rango))),
     );
   }
 
   // Lo usará HU-04 cuando un préstamo quede "confirmado".
   bloquearFechas(recursoId: number, rango: Rango): void {
     this.ocupaciones.push({ recursoId, rango });
-  }
-
-  // Punto de entrada para marcar un recurso como averiado o disponible (reparaciones, HU-futuras).
-  cambiarEstado(recursoId: number, estado: EstadoRecurso): Recurso {
-    const recurso = this.recursos.find((r) => r.id === recursoId);
-    if (!recurso) throw new NotFoundException(['El recurso no existe.']);
-    recurso.estado = estado;
-    return recurso;
   }
 
   private leerRango({ desde, hasta }: FiltrosRecursos): Rango | null {

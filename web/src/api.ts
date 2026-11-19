@@ -1,14 +1,10 @@
-// Las categorías las define la API (GET /categorias): aquí no se duplican.
-export interface Categoria {
-  valor: string
-  etiqueta: string
-}
-
-export async function listarCategorias(): Promise<Categoria[]> {
-  const res = await fetch('/api/categorias')
-  if (!res.ok) throw await leerError(res)
-  return res.json()
-}
+export const CATEGORIAS = [
+  { valor: 'calculadora', etiqueta: 'Calculadora' },
+  { valor: 'cable', etiqueta: 'Cable' },
+  { valor: 'periferico', etiqueta: 'Periférico (ratón, teclado…)' },
+  { valor: 'kit-laboratorio', etiqueta: 'Kit de laboratorio' },
+  { valor: 'otro', etiqueta: 'Otro' },
+] as const
 
 export interface Recurso {
   id: number
@@ -16,7 +12,6 @@ export interface Recurso {
   categoria: string
   estado: 'disponible' | 'averiado'
   propietarioId: number
-  creadoEn: string
 }
 
 async function leerError(res: Response): Promise<string[]> {

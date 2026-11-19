@@ -1,17 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
-import {
-  listarCategorias,
-  listarRecursos,
-  publicarRecurso,
-  type Categoria,
-  type Filtros,
-  type Recurso,
-} from './api.ts'
+import { CATEGORIAS, listarRecursos, publicarRecurso, type Filtros, type Recurso } from './api.ts'
+
+const etiquetaCategoria = (valor: string) =>
+  CATEGORIAS.find((c) => c.valor === valor)?.etiqueta ?? valor
 
 export default function App() {
-  const [categorias, setCategorias] = useState<Categoria[]>([])
-  const etiquetaCategoria = (valor: string) => categorias.find((c) => c.valor === valor)?.etiqueta ?? valor
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
@@ -51,8 +45,6 @@ export default function App() {
 
   useEffect(() => {
     void cargar()
-    // Si falla, el catálogo ya avisa de que la API no responde.
-    listarCategorias().then(setCategorias, () => setCategorias([]))
   }, [])
 
   async function enviar(e: FormEvent) {
@@ -128,7 +120,7 @@ export default function App() {
               aria-invalid={errores.length > 0 && !categoria}
             >
               <option value="">Selecciona una categoría</option>
-              {categorias.map((c) => (
+              {CATEGORIAS.map((c) => (
                 <option key={c.valor} value={c.valor}>
                   {c.etiqueta}
                 </option>
@@ -165,7 +157,7 @@ export default function App() {
             <label htmlFor="filtro-categoria">Categoría</label>
             <select id="filtro-categoria" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
               <option value="">Todas</option>
-              {categorias.map((c) => (
+              {CATEGORIAS.map((c) => (
                 <option key={c.valor} value={c.valor}>
                   {c.etiqueta}
                 </option>
