@@ -11,8 +11,8 @@ Software 5° "B", ULEAM. Se trabaja con Kanban y XP.
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `api/` | Backend: NestJS (ESM) + Vitest | Proyecto base creado |
-| `web/` | Frontend: Vite + React + TypeScript | Proyecto base creado |
+| `api/` | Backend: NestJS (ESM) + Vitest | Módulo `recursos` (HU-01), datos en memoria |
+| `web/` | Frontend: Vite + React + TypeScript | Formulario y catálogo de recursos (HU-01) |
 | `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente |
 
 Tecnologías previstas, aún sin instalar: TypeORM + PostgreSQL y JWT en `api/`,
@@ -43,6 +43,16 @@ npm install
 npm run dev         # http://localhost:5173
 npm run build       # compilación de producción
 ```
+
+## API (HU-01)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/recursos` | Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible". |
+| GET | `/recursos` | Lista el catálogo. |
+
+El frontend usa un proxy de Vite: las llamadas a `/api/*` van a `http://localhost:4200`.
+Por ahora los datos se guardan en memoria y se pierden al reiniciar la API.
 
 ## Tablero Kanban
 
@@ -75,6 +85,6 @@ historia separada y quedó absorbida por HU-11).
 - [x] Repositorio y estructura `api/` y `web/`
 - [x] Tablero Kanban público con 10 historias en Backlog
 - [x] Proyectos base de NestJS y Vite + React funcionando
+- [ ] HU-01: publicar recurso (en revisión; datos en memoria)
 - [ ] Integración continua con GitHub Actions
 - [ ] Conexión a PostgreSQL con TypeORM
-- [ ] HU-01: publicar recurso
