@@ -10,7 +10,7 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 |---|---|---|
 | `api/` | Backend: NestJS (ESM) + Vitest | Módulos recursos (HU-01 y HU-02) y solicitudes (HU-03), datos en memoria |
 | `web/` | Frontend: Vite + React + TypeScript | Formulario, catálogo, filtros y solicitudes de préstamo (HU-01, HU-02 y HU-03) |
-| `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente en este repositorio (ver [Práctica DevOps](#práctica-devops-is-505)) |
+| `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente |
 
 Tecnologías previstas, aún sin instalar: TypeORM + PostgreSQL y JWT en `api/`, React Router en `web/`.
 
@@ -89,19 +89,7 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 
 Lista de pull requests: <https://github.com/GabrielGL11/Proyecto_ReCircula_Campus-Mas/pulls?q=is%3Apr+state%3Aclosed>
 
-## Práctica DevOps (IS-505)
-
-La práctica «GitHub Actions, pruebas y despliegue» se construyó y se demostró en un repositorio aparte, con autorización del docente, aplicando las mismas prácticas de XP (integración continua, pruebas y revisión entre pares) que usa este proyecto:
-
-- **Repositorio:** <https://github.com/GabrielGL11/Cardinova-react-supabase> (rama `devops-nube-practica`)
-- **Workflow:** `.github/workflows/ci-cd.yml` — job `ci` (lint, pruebas con Vitest y build) y job `deploy` (S3 + CloudFront), que solo corre si `ci` pasa.
-- **Fallo controlado y corrección:** ejecuciones #4 (roja) y #5 (verde); despliegue real en la ejecución #7.
-- **Revisión entre pares:** pull requests #1 y #2, aprobados por un compañero.
-- **Historias de la práctica:** issues #3, #4 y #5 del repositorio de la práctica.
-- **Aplicación desplegada:** <https://dfez6xsgo6ub2.cloudfront.net>
-- **Evidencias y demostración:** carpetas compartidas en Google Drive, indicadas en el informe.
-
-### Integración continua en este repositorio
+## Integración continua
 
 Pendiente. El diseño previsto es un workflow de GitHub Actions con dos jobs, que se ejecuta en cada push y pull request:
 
@@ -125,6 +113,5 @@ Pendiente. El diseño previsto es un workflow de GitHub Actions con dos jobs, qu
 - [x] HU-01: publicar recurso (PR #14, #16 y #17 fusionados; datos en memoria)
 - [x] HU-02: consultar disponibilidad por categoría y fechas (PR #15 fusionado; datos en memoria)
 - [x] HU-03: solicitar préstamo (PR #18 fusionado; datos en memoria)
-- [x] Práctica DevOps con GitHub Actions y despliegue en AWS (repositorio de la práctica)
-- [ ] Integración continua con GitHub Actions en este repositorio
+- [ ] Integración continua con GitHub Actions
 - [ ] Conexión a PostgreSQL con TypeORM
