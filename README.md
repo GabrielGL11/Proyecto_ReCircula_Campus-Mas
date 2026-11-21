@@ -11,7 +11,9 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 | `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01, HU-02 y HU-03 |
 | `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01 y HU-02) y solicitudes (HU-03) sobre la base de datos |
 | `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01, HU-02 y HU-03 con sesión iniciada |
-| `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente |
+| `.github/workflows/` | Integración continua y despliegue de la web en AWS (GitHub Actions) | `ci.yml` y `deploy.yml`; configuración en [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) |
+| `scripts/` | Verificación posterior al despliegue y escaneo de secretos | `smoke-test.sh` y `check-secrets.sh` |
+| `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
 
 ## Arquitectura
 
@@ -155,16 +157,27 @@ Lista de pull requests: <https://github.com/GabrielGL11/Proyecto_ReCircula_Campu
 | RNF-02 | Errores comprensibles que conservan lo escrito | Pruebas de casos negativos de HU-03 (fechas, recurso averiado, recurso inexistente) y formularios que no borran lo escrito |
 | RNF-03 | Control de acceso por rol | Roles aplicados en la API y en la base de datos; pruebas de que un rol no autorizado recibe 403 |
 
-## Integración continua
+## Estrategia de ramas y flujo de trabajo
 
-Pendiente. El diseño previsto es un workflow de GitHub Actions con dos jobs, que se ejecuta en cada push y pull request:
+- `main` siempre está estable y desplegable. Está protegida: solo se cambia con pull request, con **1 aprobación de un compañero** y con los checks de CI en verde.
+- Cada historia o arreglo va en una rama propia: `feature/<tema>`, `fix/<tema>` o `demo/<tema>`.
+- Cada PR usa la plantilla (`.github/pull_request_template.md`): historia, criterio de aceptación y prueba que lo respalda.
+- Al fusionar a `main` se despliega solo. Las versiones buenas se etiquetan (`v1.0.0`) para poder volver a ellas.
 
-| Job | Pasos |
-|---|---|
-| `api` | `npm ci`, `npm test`, `npm run test:e2e` y `npm run build` |
-| `web` | `npm ci` y `npm run build` |
+## Integración continua y despliegue
 
-Las pruebas de la API no necesitan la base de datos ni las variables de Supabase, así que pueden correr en CI sin secretos.
+Dos workflows en `.github/workflows/`:
+
+| Workflow | Cuándo corre | Qué hace |
+|---|---|---|
+| `ci.yml` | Pull requests y push a cualquier rama que no sea `main` | Job `api`: `npm ci`, `npm test`, `npm run test:e2e`, `npm run build`. Job `web`: `npm ci` y `npm run build`. Job `secretos`: busca claves y `.env` en el repositorio |
+| `deploy.yml` | Push a `main`, o manual con `ref` para volver a una versión anterior | Corre `ci.yml`; si pasa, compila `web/`, escanea el build, la publica en S3, refresca CloudFront y verifica la versión publicada con `scripts/smoke-test.sh`. Se omite mientras no exista la variable `S3_BUCKET` |
+
+- Las pruebas de la API no necesitan la base de datos ni secretos.
+- El acceso a AWS usa OIDC: no hay claves de AWS guardadas en GitHub. El único secreto es el ARN del rol (`AWS_ROLE_ARN`); lo demás son variables públicas.
+- Cada despliegue publica `/version.json` con el commit, y el resumen de la ejecución muestra la versión anterior para poder volver a ella.
+- Pasos de AWS, variables de GitHub y rollback: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md). Guion completo de la práctica: [`docs/PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md).
+- La API (NestJS) se despliega aparte: S3 solo sirve la web.
 
 ## Equipo
 
@@ -186,4 +199,6 @@ Las pruebas de la API no necesitan la base de datos ni las variables de Supabase
 - [x] HU-01, HU-02 y HU-03 conectadas de punta a punta: web, API y base de datos
 - [ ] HU-04 en adelante (aprobar o rechazar, devolución, avería, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
 - [ ] Revisión de accesibilidad con Lighthouse (RNF-01)
-- [ ] Integración continua con GitHub Actions
+- [x] Integración continua con GitHub Actions (`ci.yml`)
+- [ ] Despliegue de la web en AWS (S3 + CloudFront): workflow listo; falta configurar AWS y las variables de GitHub
+- [ ] Despliegue de la API

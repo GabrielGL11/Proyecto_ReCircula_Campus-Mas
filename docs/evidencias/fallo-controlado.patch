@@ -1,0 +1,13 @@
+diff --git a/api/src/recursos/rango.ts b/api/src/recursos/rango.ts
+index 7e54568..f04bc3a 100644
+--- a/api/src/recursos/rango.ts
++++ b/api/src/recursos/rango.ts
+@@ -7,7 +7,7 @@ export interface Rango {
+ // Regla R1: dos rangos se superponen si cada uno empieza antes de que termine el otro.
+ // Las fechas ISO se comparan bien como texto.
+ export function seSuperpone(a: Rango, b: Rango): boolean {
+-  return a.inicio <= b.fin && b.inicio <= a.fin;
++  return a.inicio < b.fin && b.inicio < a.fin;
+ }
+ 
+ // Una fecha ISO válida: formato AAAA-MM-DD y que exista en el calendario (rechaza 2026-02-30).
