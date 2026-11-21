@@ -1,17 +1,10 @@
-// Las categorías las define la API (GET /categorias): aquí no se duplican.
-export interface Categoria {
-  valor: string
-  etiqueta: string
-}
-
-export async function listarCategorias(): Promise<Categoria[]> {
-  const res = await fetch('/api/categorias')
-  if (!res.ok) throw await leerError(res)
-  return res.json()
-}
-
-// Hoy (AAAA-MM-DD) según la hora de Ecuador, para bloquear fechas pasadas en el calendario.
-export const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date())
+export const CATEGORIAS = [
+  { valor: 'calculadora', etiqueta: 'Calculadora' },
+  { valor: 'cable', etiqueta: 'Cable' },
+  { valor: 'periferico', etiqueta: 'Periférico (ratón, teclado…)' },
+  { valor: 'kit-laboratorio', etiqueta: 'Kit de laboratorio' },
+  { valor: 'otro', etiqueta: 'Otro' },
+] as const
 
 export interface Recurso {
   id: number
@@ -48,8 +41,6 @@ export async function listarRecursos(filtros: Filtros = {}): Promise<Recurso[]> 
   return res.json()
 }
 
-// TODO(JWT): cuando haya autenticación, el propietario lo deduce la API del token
-// y `propietarioId` deja de enviarse desde aquí.
 export async function publicarRecurso(datos: {
   nombre: string
   categoria: string
@@ -60,6 +51,36 @@ export async function publicarRecurso(datos: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos),
   })
+  if (!res.ok) throw await leerError(res)
+  return res.json()
+}
+
+export interface Solicitud {
+  id: number
+  recursoId: number
+  recursoNombre: string
+  solicitanteId: number
+  rango: { inicio: string; fin: string }
+  estado: 'pendiente' | 'confirmada' | 'rechazada' | 'devuelta'
+}
+
+export async function crearSolicitud(datos: {
+  recursoId: number
+  inicio: string
+  fin: string
+  solicitanteId: number
+}): Promise<Solicitud> {
+  const res = await fetch('/api/solicitudes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  })
+  if (!res.ok) throw await leerError(res)
+  return res.json()
+}
+
+export async function listarSolicitudes(solicitanteId: number): Promise<Solicitud[]> {
+  const res = await fetch(`/api/solicitudes?solicitanteId=${solicitanteId}`)
   if (!res.ok) throw await leerError(res)
   return res.json()
 }

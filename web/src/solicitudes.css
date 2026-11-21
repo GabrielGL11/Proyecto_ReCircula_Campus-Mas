@@ -1,0 +1,25 @@
+/* HU-03: solicitud de préstamo. Se apoya en las variables de App.css. */
+.catalogo li { display: block; }
+.catalogo .fila { display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center; }
+.catalogo .fila-solicitud { grid-template-columns: 1fr auto auto; }
+.catalogo .fila button { padding: 5px 14px; font-size: 0.85rem; }
+
+.catalogo .solicitud {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; align-items: end;
+  margin-top: 12px; padding: 14px; background: #fff; border: 1px solid var(--border); border-radius: 3px;
+}
+.catalogo .solicitud .campo { margin-bottom: 0; }
+.catalogo .solicitud .mensaje { grid-column: 1 / -1; margin: 0; }
+
+.estado.pendiente { background: #fff8e6; color: #7a5200; border-color: #e6cf8f; }
+.estado.confirmada { background: #f1f8f4; color: #1d5a37; border-color: #b7d9c4; }
+.estado.rechazada { background: #fdf3f3; color: #7a1c20; border-color: #e3b5b7; }
+.estado.devuelta { background: var(--superficie); color: var(--text); border-color: var(--border); }
+
+@media (max-width: 520px) {
+  .catalogo .fila, .catalogo .fila-solicitud { grid-template-columns: 1fr auto; }
+  .catalogo .fila .categoria { grid-column: 1; }
+}
+
+/* La lista de errores de dentro del formulario no debe heredar el estilo de las filas del catálogo. */
+.catalogo .mensaje li { display: list-item; padding: 0; border: 0; background: none; }
