@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
 import './solicitudes.css'
 import {
@@ -38,6 +38,10 @@ export default function App() {
   const [hasta, setHasta] = useState('')
   const [errorFiltro, setErrorFiltro] = useState<string | null>(null)
   const [filtrosActivos, setFiltrosActivos] = useState(false)
+
+  // Número de la última petición enviada. Si llega una respuesta de una petición
+  // anterior (porque el usuario pulsó Buscar dos veces seguidas), se ignora.
+  const ultimaPeticion = useRef(0)
 
   // Solicitud de préstamo (HU-03)
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
@@ -96,14 +100,17 @@ export default function App() {
   }
 
   async function cargar(filtros: Filtros = {}) {
+    const miPeticion = ++ultimaPeticion.current
+    const vigente = () => miPeticion === ultimaPeticion.current
     setCargando(true)
     setErrorCatalogo(null)
     try {
-      setRecursos(await listarRecursos(filtros))
+      const datos = await listarRecursos(filtros)
+      if (vigente()) setRecursos(datos)
     } catch {
-      setErrorCatalogo('No se pudo cargar el catálogo. Revisa que la API esté encendida.')
+      if (vigente()) setErrorCatalogo('No se pudo cargar el catálogo. Revisa que la API esté encendida.')
     } finally {
-      setCargando(false)
+      if (vigente()) setCargando(false)
     }
   }
 
@@ -118,6 +125,7 @@ export default function App() {
     setErrores([])
     setConfirmacion(null)
     try {
+      // TODO(JWT): el propietario saldrá del token; por ahora se fija en 1.
       const nuevo = await publicarRecurso({ nombre, categoria, propietarioId: 1 })
       setConfirmacion(`«${nuevo.nombre}» se publicó y ya aparece como disponible.`)
       setNombre('')
