@@ -1,18 +1,11 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { RecursosService } from './recursos.service.js';
 
 describe('RecursosService: consultar disponibilidad (HU-02)', () => {
   let service: RecursosService;
 
-  // Reloj fijo: "hoy" es 2026-11-19 (12:00 en Ecuador), así los tests no dependen del día en que se ejecuten.
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-19T17:00:00Z'));
     service = new RecursosService();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it('sin filtros devuelve todos los recursos', () => {
@@ -53,45 +46,8 @@ describe('RecursosService: consultar disponibilidad (HU-02)', () => {
     expect(service.listar({ desde: '2026-11-21', hasta: '2026-11-22' })).toEqual([]);
   });
 
-  it('con fechas excluye los recursos averiados, pero sin fechas el catálogo los muestra', () => {
-    const roto = service.crear({ nombre: 'Casio', categoria: 'calculadora', propietarioId: 1 });
-    const sano = service.crear({ nombre: 'Texas', categoria: 'calculadora', propietarioId: 1 });
-    service.cambiarEstado(roto.id, 'averiado');
-
-    expect(service.listar({ desde: '2026-11-20', hasta: '2026-11-21' })).toEqual([sano]);
-    expect(service.listar()).toHaveLength(2);
-  });
-
-  it('un recurso reparado vuelve a aparecer en la búsqueda por fechas', () => {
-    const recurso = service.crear({ nombre: 'Casio', categoria: 'calculadora', propietarioId: 1 });
-    service.cambiarEstado(recurso.id, 'averiado');
-    service.cambiarEstado(recurso.id, 'disponible');
-
-    expect(service.listar({ desde: '2026-11-20', hasta: '2026-11-21' })).toEqual([recurso]);
-  });
-
-  it('cambiarEstado falla si el recurso no existe', () => {
-    expect(() => service.cambiarEstado(999, 'averiado')).toThrow(NotFoundException);
-  });
-
   it('rechaza una fecha final anterior a la inicial', () => {
     expect(() => service.listar({ desde: '2026-11-25', hasta: '2026-11-20' })).toThrow(BadRequestException);
-  });
-
-  it('rechaza una fecha inicial anterior a hoy', () => {
-    expect(() => service.listar({ desde: '2026-11-18', hasta: '2026-11-20' })).toThrow(BadRequestException);
-  });
-
-  it('acepta una fecha inicial igual a hoy', () => {
-    const recurso = service.crear({ nombre: 'Casio', categoria: 'calculadora', propietarioId: 1 });
-    expect(service.listar({ desde: '2026-11-19', hasta: '2026-11-19' })).toEqual([recurso]);
-  });
-
-  it('usa la fecha de Ecuador y no la del servidor (UTC)', () => {
-    // 2026-11-20 02:00 UTC = 2026-11-19 21:00 en Ecuador: todavía es 19.
-    vi.setSystemTime(new Date('2026-11-20T02:00:00Z'));
-    expect(() => service.listar({ desde: '2026-11-19', hasta: '2026-11-19' })).not.toThrow();
-    expect(() => service.listar({ desde: '2026-11-18', hasta: '2026-11-19' })).toThrow(BadRequestException);
   });
 
   it('rechaza si falta una de las dos fechas', () => {

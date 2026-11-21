@@ -1,31 +1,15 @@
-// Única fuente de verdad de las categorías: el frontend las pide con GET /categorias.
-// Para agregar una categoría basta con añadirla aquí.
-export const ETIQUETAS_CATEGORIA = {
-  calculadora: 'Calculadora',
-  cable: 'Cable',
-  periferico: 'Periférico (ratón, teclado…)',
-  'kit-laboratorio': 'Kit de laboratorio',
-  otro: 'Otro',
-} as const;
-
-export type Categoria = keyof typeof ETIQUETAS_CATEGORIA;
-export const CATEGORIAS = Object.keys(ETIQUETAS_CATEGORIA) as Categoria[];
+export const CATEGORIAS = ['calculadora', 'cable', 'periferico', 'kit-laboratorio', 'otro'] as const;
+export type Categoria = (typeof CATEGORIAS)[number];
 
 export function esCategoria(valor: unknown): valor is Categoria {
-  return typeof valor === 'string' && (CATEGORIAS as string[]).includes(valor);
+  return typeof valor === 'string' && (CATEGORIAS as readonly string[]).includes(valor);
 }
-
-export function listarCategorias(): { valor: Categoria; etiqueta: string }[] {
-  return CATEGORIAS.map((valor) => ({ valor, etiqueta: ETIQUETAS_CATEGORIA[valor] }));
-}
-
-export type EstadoRecurso = 'disponible' | 'averiado';
 
 export interface Recurso {
   id: number;
   nombre: string;
   categoria: Categoria;
-  estado: EstadoRecurso;
+  estado: 'disponible' | 'averiado';
   propietarioId: number;
 }
 

@@ -1,7 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { esCategoria, type CrearRecursoDto, type EstadoRecurso, type Recurso } from './recurso.js';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { esCategoria, type CrearRecursoDto, type Recurso } from './recurso.js';
 import { seSuperpone, type Rango } from './rango.js';
-import { hoy } from './fecha.js';
 
 export interface FiltrosRecursos {
   categoria?: string;
@@ -64,16 +63,13 @@ export class RecursosService {
     return recurso;
   }
 
-  // HU-02: sin filtros devuelve todo el catálogo (cada recurso con su estado).
-  // Con fechas busca disponibilidad: solo recursos en estado "disponible" (no averiados)
-  // y sin préstamo confirmado que se cruce con el rango.
+  // HU-02: sin filtros devuelve todo el catálogo; con fechas, solo los recursos sin préstamo confirmado en ese rango.
   listar(filtros: FiltrosRecursos = {}): Recurso[] {
     const rango = this.leerRango(filtros);
     return this.recursos.filter(
       (r) =>
         (!filtros.categoria || r.categoria === filtros.categoria) &&
-        (!rango ||
-          (r.estado === 'disponible' && !this.ocupaciones.some((o) => o.recursoId === r.id && seSuperpone(o.rango, rango)))),
+        (!rango || !this.ocupaciones.some((o) => o.recursoId === r.id && seSuperpone(o.rango, rango))),
     );
   }
 
@@ -87,22 +83,12 @@ export class RecursosService {
     this.ocupaciones.push({ recursoId, rango });
   }
 
-  // Punto de entrada para marcar un recurso como averiado o disponible (reparaciones, HU-futuras).
-  cambiarEstado(recursoId: number, estado: EstadoRecurso): Recurso {
-    const recurso = this.recursos.find((r) => r.id === recursoId);
-    if (!recurso) throw new NotFoundException(['El recurso no existe.']);
-    recurso.estado = estado;
-    return recurso;
-  }
-
   private leerRango({ desde, hasta }: FiltrosRecursos): Rango | null {
     if (!desde && !hasta) return null;
     if (!desde || !hasta) throw new BadRequestException(['Indica la fecha inicial y la final.']);
     const valida = (f: string) => FECHA_ISO.test(f) && !Number.isNaN(Date.parse(f));
     if (!valida(desde) || !valida(hasta)) throw new BadRequestException(['Las fechas no son válidas (usa AAAA-MM-DD).']);
     if (hasta < desde) throw new BadRequestException(['La fecha final no puede ser anterior a la inicial.']);
-    // Solo se puede consultar desde hoy en adelante (hoy incluido).
-    if (desde < hoy()) throw new BadRequestException(['La fecha inicial no puede ser anterior a hoy.']);
     return { inicio: desde, fin: hasta };
   }
 }

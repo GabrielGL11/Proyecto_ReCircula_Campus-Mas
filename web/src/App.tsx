@@ -261,7 +261,7 @@ export default function App() {
           </div>
         )}
 
-        {!cargando && !errorCatalogo && recursos.length === 0 && (
+        {!cargando && !errorCatalogo && !errorFiltro && recursos.length === 0 && (
           <p className="vacio">
             {filtrosActivos
               ? 'Sin resultados: no hay recursos disponibles con esos filtros. Prueba otras fechas o categoría.'
@@ -269,7 +269,7 @@ export default function App() {
           </p>
         )}
 
-        {!cargando && !errorCatalogo && recursos.length > 0 && (
+        {!cargando && !errorCatalogo && !errorFiltro && recursos.length > 0 && (
           <ul className="catalogo">
             {recursos.map((r) => (
               <li key={r.id}>

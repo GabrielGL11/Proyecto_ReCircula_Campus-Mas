@@ -12,11 +12,6 @@ describe('Recursos (e2e)', () => {
   let servicio: RecursosService;
 
   beforeEach(async () => {
-    // Solo se falsea Date (no los timers): con todos los timers falsos, supertest se cuelga.
-    // "Hoy" = 2026-11-19 en Ecuador.
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-11-19T17:00:00Z'));
-
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -28,7 +23,6 @@ describe('Recursos (e2e)', () => {
 
   afterEach(async () => {
     await app.close();
-    vi.useRealTimers();
   });
 
   describe('POST /recursos', () => {
@@ -86,18 +80,9 @@ describe('Recursos (e2e)', () => {
       await request(app.getHttpServer()).get('/recursos?desde=22/11/2026&hasta=23/11/2026').expect(400);
     });
 
-    it('responde 400 si la fecha inicial es anterior a hoy', async () => {
-      const res = await request(app.getHttpServer()).get('/recursos?desde=2026-11-18&hasta=2026-11-20').expect(400);
-      expect(res.body.message).toContain('La fecha inicial no puede ser anterior a hoy.');
-    });
-  });
-
-  describe('GET /categorias', () => {
-    it('devuelve las categorías con su etiqueta', async () => {
-      const res = await request(app.getHttpServer()).get('/categorias').expect(200);
-
-      expect(res.body).toContainEqual({ valor: 'cable', etiqueta: 'Cable' });
-      expect(res.body).toHaveLength(5);
+    it('responde 400 si la fecha final es anterior a la inicial', async () => {
+      const res = await request(app.getHttpServer()).get('/recursos?desde=2026-11-22&hasta=2026-11-20').expect(400);
+      expect(res.body.message).toContain('La fecha final no puede ser anterior a la inicial.');
     });
   });
 });
