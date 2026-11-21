@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# variables de entorno (la plantilla .env.example sí se sube)
+.env
+.env.*
+!.env.example
