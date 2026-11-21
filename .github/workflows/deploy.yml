@@ -1,0 +1,165 @@
+name: Deploy web a AWS (S3 + CloudFront)
+
+# Cada push a main: primero CI; si pasa, compila la web, la publica en S3,
+# refresca CloudFront y verifica que la versión publicada es la esperada.
+#
+# Volver a una versión estable (rollback): Actions → "Deploy web a AWS" → Run workflow
+# y en "ref" poner el commit, la etiqueta o la rama que estaba bien. Ver docs/DEPLOY-AWS.md.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Versión a publicar: commit, etiqueta o rama (vacío = la rama elegida arriba). Úsalo para volver a una versión estable.'
+        type: string
+        default: ''
+      omitir_ci:
+        description: 'Omitir pruebas (solo para volver rápido a una versión que ya pasó CI)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: ${{ !inputs.omitir_ci }}
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  deploy:
+    name: Publicar, refrescar y verificar
+    needs: ci
+    # Se omite mientras no exista la variable S3_BUCKET (AWS sin configurar) o si CI falló.
+    if: ${{ !cancelled() && vars.S3_BUCKET != '' && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.SITE_URL }}
+    permissions:
+      id-token: write   # necesario para OIDC con AWS
+      contents: read
+    env:
+      # Valores no secretos (variables de GitHub). El único secreto es AWS_ROLE_ARN.
+      SITE_URL: ${{ vars.SITE_URL }}
+      S3_BUCKET: ${{ vars.S3_BUCKET }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      DIST_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+      API_URL: ${{ vars.API_URL }}
+      # Valores públicos (clave publishable). Se incrustan en el JS al compilar.
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_KEY: ${{ vars.VITE_SUPABASE_KEY }}
+      REF_PEDIDA: ${{ inputs.ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Comprobar variables y fijar la versión
+        run: |
+          faltan=""
+          for v in SITE_URL AWS_REGION DIST_ID VITE_SUPABASE_URL VITE_SUPABASE_KEY; do
+            [ -n "${!v}" ] || faltan="$faltan $v"
+          done
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan variables en GitHub (Settings → Secrets and variables → Actions → Variables):$faltan"
+            exit 1
+          fi
+          case "$VITE_SUPABASE_KEY" in
+            sb_secret_*) echo "::error::VITE_SUPABASE_KEY es una clave secreta. La web solo admite la clave publishable."; exit 1 ;;
+          esac
+          echo "SITE_URL=${SITE_URL%/}" >> "$GITHUB_ENV"
+          echo "DEPLOY_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+        working-directory: web
+
+      - name: Build de producción
+        run: npm run build
+        working-directory: web
+
+      # Nada secreto debe quedar dentro del JavaScript que se publica.
+      - name: Buscar secretos en el build
+        run: bash scripts/check-secrets.sh dist web/dist
+
+      # version.json permite saber qué commit está publicado y comprobarlo tras el despliegue.
+      - name: Registrar la versión que se va a publicar
+        run: |
+          jq -nc \
+            --arg sha "$DEPLOY_SHA" \
+            --arg ref "$REF_PEDIDA" \
+            --arg run "${GITHUB_RUN_ID}" \
+            --arg intento "${GITHUB_RUN_ATTEMPT}" \
+            --arg fecha "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{sha:$sha, ref:$ref, run:$run, intento:$intento, fecha:$fecha}' > web/dist/version.json
+          cat web/dist/version.json
+
+      - name: Credenciales de AWS (OIDC, sin claves guardadas)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Para poder decir "venimos de la versión X" y volver a ella si algo sale mal.
+      - name: Leer la versión publicada actualmente
+        run: |
+          anterior=$(curl -fsS --max-time 15 "$SITE_URL/version.json" 2>/dev/null | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p')
+          echo "PREV_SHA=${anterior:-ninguna}" >> "$GITHUB_ENV"
+          echo "Versión anterior: ${anterior:-ninguna}"
+
+      # Archivos con hash en el nombre (dist/assets): caché de 1 año.
+      - name: Subir assets (caché largo)
+        run: |
+          aws s3 sync web/dist/assets "s3://$S3_BUCKET/assets" \
+            --cache-control "public,max-age=31536000,immutable"
+
+      # index.html, version.json, favicon, etc. no llevan hash: siempre se revalidan.
+      # --delete limpia lo que ya no existe; los assets/ viejos se conservan a propósito
+      # para que una pestaña abierta con el index anterior no se rompa.
+      - name: Subir el resto (sin caché)
+        run: |
+          aws s3 sync web/dist "s3://$S3_BUCKET" \
+            --exclude "assets/*" --delete \
+            --cache-control "no-cache"
+
+      - name: Invalidar CloudFront y esperar
+        run: |
+          id=$(aws cloudfront create-invalidation \
+            --distribution-id "$DIST_ID" --paths "/*" \
+            --query Invalidation.Id --output text)
+          echo "Invalidación $id"
+          aws cloudfront wait invalidation-completed --distribution-id "$DIST_ID" --id "$id"
+
+      # Recorrido principal (la app carga y es la versión esperada) y casos de error
+      # (el bucket no es público; la API sin sesión responde 401).
+      - name: Verificar el despliegue
+        run: bash scripts/smoke-test.sh "$SITE_URL" "$DEPLOY_SHA"
+
+      - name: Resumen
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Despliegue de la web"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Sitio | ${SITE_URL:-sin configurar} |"
+            echo "| Versión publicada | \`${DEPLOY_SHA:-?}\` |"
+            echo "| Versión anterior (estable) | \`${PREV_SHA:-?}\` |"
+            echo "| Resultado | ${{ job.status }} |"
+            echo
+            echo "**Volver a la versión anterior:** Actions → Deploy web a AWS → Run workflow → ref = \`${PREV_SHA:-?}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
