@@ -57,7 +57,7 @@ create policy categorias_admin on categorias for all to authenticated
 -- usuarios: cada quien ve su fila; el coordinador ve todas (nombres: vista v_usuarios_publicos)
 drop policy if exists usuarios_select on usuarios;
 create policy usuarios_select on usuarios for select to authenticated
-  using (auth_id = auth.uid() or es_coordinador());
+  using (auth_id = (select auth.uid()) or es_coordinador());
 
 -- recursos: catálogo visible; publica el propietario (o el coordinador); edita solo el propietario (HU-09 b)
 drop policy if exists recursos_select on recursos;

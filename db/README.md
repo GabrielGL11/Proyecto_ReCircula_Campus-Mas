@@ -99,8 +99,25 @@ await manager.query('select aprobar_solicitud($1)', [solicitudId]);
 
 ## Notas
 
-- Las vistas `v_catalogo`, `v_panel_impacto` y `v_usuarios_publicos` aparecen como *UNRESTRICTED* en el panel de Supabase porque las vistas no tienen RLS propio. Es esperado: solo las pueden leer usuarios autenticados, y `v_usuarios_publicos` expone únicamente `id`, `nombre` y `rol`.
+- Las vistas deben configurarse con `security_invoker = true` para que respeten los permisos y las políticas RLS de las tablas subyacentes. Tras aplicar `05_security_hardening.sql`, comprobar los resultados con cuentas de distintos roles; `v_usuarios_publicos` queda limitada por la política de lectura de `usuarios`.
 - Los mensajes de error que comprueban las pruebas (`check`, `foreign key`, `exclusion`) están en inglés; si el servidor usara otro idioma, habría que ajustar esos tres fragmentos en `04_tests.sql`.
 - Al promover la lista de espera se crea una solicitud `pendiente` nueva; la solicitud original de esa persona, si seguía pendiente, no se cancela. Conviene rechazarla en la demo.
 - Un recurso con préstamo confirmado a futuro que luego se reporta averiado conserva ese préstamo; cancelarlo automáticamente es una decisión de negocio que conviene registrar en el tablero.
 - Próximo paso posible: entidades TypeORM para `api/`.
+
+## Endurecimiento de seguridad (Supabase existente)
+
+Para una base de datos que ya ejecutó los scripts anteriores, aplicar de forma
+incremental `05_security_hardening.sql` desde **Supabase → SQL Editor**. No
+volver a ejecutar los scripts iniciales completos sobre una base con datos.
+
+El script 05 configura las tres vistas para respetar RLS (`security_invoker`),
+fija el `search_path` de las tres funciones señaladas y optimiza la política
+`usuarios_select`. También intenta mover `btree_gist` a `extensions` solo si
+PostgreSQL indica que la extensión es reubicable.
+
+Después de ejecutarlo, probar catálogo, panel de impacto, listado de usuarios
+públicos, solicitudes y transiciones de órdenes con cuentas de los distintos
+roles. Las vistas con `security_invoker` respetan los permisos y políticas RLS
+de las tablas subyacentes; por ello, los resultados pueden variar según el rol
+autenticado. No conceder permisos amplios para ocultar advertencias del asesor.

@@ -16,7 +16,9 @@
 --     "prestado" se deriva (vista v_catalogo.estado_actual).
 -- =====================================================================
 
-create extension if not exists btree_gist;
+-- Las extensiones se mantienen fuera de public cuando la instalación lo permite.
+create schema if not exists extensions;
+create extension if not exists btree_gist with schema extensions;
 
 -- ---------------------------------------------------------------------
 -- Tablas
@@ -175,7 +177,9 @@ end $$;
 -- Triggers (reglas que se cumplen sin importar desde dónde se escriba)
 -- ---------------------------------------------------------------------
 create or replace function trg_touch_actualizado() returns trigger
-language plpgsql as $$
+language plpgsql
+set search_path = public, pg_temp
+as $$
 begin new.actualizado_en := now(); return new; end $$;
 drop trigger if exists recursos_touch on recursos;
 create trigger recursos_touch before update on recursos
@@ -210,7 +214,9 @@ create trigger solicitudes_insert before insert on solicitudes
 
 -- Máquina de estados de la solicitud (diagrama de estados del portafolio)
 create or replace function trg_solicitud_transicion() returns trigger
-language plpgsql as $$
+language plpgsql
+set search_path = public, pg_temp
+as $$
 begin
   if new.recurso_id <> old.recurso_id or new.solicitante_id <> old.solicitante_id
      or new.inicio <> old.inicio or new.fin <> old.fin then
@@ -234,7 +240,9 @@ create trigger solicitudes_transicion before update on solicitudes
 
 -- HU-08: la orden solo avanza abierta → en_reparacion → resuelta
 create or replace function trg_orden_validar() returns trigger
-language plpgsql as $$
+language plpgsql
+set search_path = public, pg_temp
+as $$
 begin
   if new.estado is distinct from old.estado then
     if not ((old.estado = 'abierta' and new.estado = 'en_reparacion')
@@ -567,7 +575,8 @@ end $$;
 -- ---------------------------------------------------------------------
 -- Vistas
 -- ---------------------------------------------------------------------
-create or replace view v_catalogo as
+create or replace view v_catalogo
+with (security_invoker = true) as
 select r.id, r.nombre, r.categoria, r.descripcion, r.propietario_id, r.estado,
        case when r.estado <> 'disponible' then r.estado
             when exists (select 1 from solicitudes s
@@ -577,10 +586,12 @@ select r.id, r.nombre, r.categoria, r.descripcion, r.propietario_id, r.estado,
   from recursos r;
 
 -- HU-10: sin datos devuelve ceros, no falla
-create or replace view v_panel_impacto as
+create or replace view v_panel_impacto
+with (security_invoker = true) as
 select (select count(*) from solicitudes where estado = 'devuelta')            as prestamos_completados,
        (select count(*) from ordenes_reparacion where estado = 'resuelta')     as reparaciones_resueltas,
        (select count(distinct recurso_id) from solicitudes where estado = 'devuelta') as recursos_reutilizados;
 
-create or replace view v_usuarios_publicos as
+create or replace view v_usuarios_publicos
+with (security_invoker = true) as
 select id, nombre, rol from usuarios;
