@@ -6,14 +6,14 @@ import {
   crearSolicitud,
   listarRecursos,
   listarSolicitudes,
+  obtenerUsuario,
   publicarRecurso,
   type Filtros,
   type Recurso,
   type Solicitud,
+  type Usuario,
 } from './api.ts'
-
-// Mientras no exista el inicio de sesión (JWT), la persona que solicita es fija.
-const SOLICITANTE_ID = 2
+import { useSesion } from './auth/sesion.ts'
 
 const formatoFecha = (iso: string) => iso.split('-').reverse().join('/')
 
@@ -21,6 +21,12 @@ const etiquetaCategoria = (valor: string) =>
   CATEGORIAS.find((c) => c.valor === valor)?.etiqueta ?? valor
 
 export default function App() {
+  const { session, cerrarSesion } = useSesion()
+
+  // Qué ve cada rol (la regla de verdad está en la API y la base; esto solo evita mostrar lo que no le toca).
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const puedePublicar = usuario?.rol === 'propietario' || usuario?.rol === 'coordinador' // HU-01
+  const puedeSolicitar = usuario?.rol === 'solicitante' // HU-03
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
@@ -54,7 +60,7 @@ export default function App() {
 
   async function cargarSolicitudes() {
     try {
-      setSolicitudes(await listarSolicitudes(SOLICITANTE_ID))
+      setSolicitudes(await listarSolicitudes())
     } catch {
       setSolicitudes([])
     }
@@ -84,7 +90,6 @@ export default function App() {
         recursoId: recursoElegido,
         inicio: inicioSolicitud,
         fin: finSolicitud,
-        solicitanteId: SOLICITANTE_ID,
       })
       setConfirmacionSolicitud(
         `Solicitud enviada: «${nueva.recursoNombre}» del ${formatoFecha(nueva.rango.inicio)} al ${formatoFecha(nueva.rango.fin)}. Queda pendiente de aprobación.`,
@@ -116,8 +121,14 @@ export default function App() {
 
   useEffect(() => {
     void cargar()
-    void cargarSolicitudes()
+    obtenerUsuario()
+      .then(setUsuario)
+      .catch(() => setUsuario(null))
   }, [])
+
+  useEffect(() => {
+    if (puedeSolicitar) void cargarSolicitudes()
+  }, [puedeSolicitar])
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
@@ -125,8 +136,8 @@ export default function App() {
     setErrores([])
     setConfirmacion(null)
     try {
-      // TODO(JWT): el propietario saldrá del token; por ahora se fija en 1.
-      const nuevo = await publicarRecurso({ nombre, categoria, propietarioId: 1 })
+      // El propietario sale del token de la sesión, no del formulario.
+      const nuevo = await publicarRecurso({ nombre, categoria })
       setConfirmacion(`«${nuevo.nombre}» se publicó y ya aparece como disponible.`)
       setNombre('')
       setCategoria('')
@@ -167,59 +178,68 @@ export default function App() {
       <header>
         <h1>ReCircula Campus</h1>
         <p>Publica y encuentra recursos tecnológicos del campus.</p>
+        <p className="sesion">
+          Sesión de {session?.user.email}
+          {usuario && ` (${usuario.rol})`}{' '}
+          <button type="button" className="secundario" onClick={() => void cerrarSesion()}>
+            Cerrar sesión
+          </button>
+        </p>
       </header>
 
-      <section aria-labelledby="titulo-form">
-        <h2 id="titulo-form">Publicar un recurso</h2>
-        <form onSubmit={enviar} noValidate>
-          <div className="campo">
-            <label htmlFor="nombre">Nombre del recurso</label>
-            <input
-              id="nombre"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              aria-invalid={errores.length > 0 && !nombre.trim()}
-              placeholder="Ej.: Calculadora Casio fx-991"
-            />
-          </div>
-
-          <div className="campo">
-            <label htmlFor="categoria">Categoría</label>
-            <select
-              id="categoria"
-              value={categoria}
-              onChange={(e) => setCategoria(e.target.value)}
-              aria-invalid={errores.length > 0 && !categoria}
-            >
-              <option value="">Selecciona una categoría</option>
-              {CATEGORIAS.map((c) => (
-                <option key={c.valor} value={c.valor}>
-                  {c.etiqueta}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {errores.length > 0 && (
-            <div role="alert" className="mensaje error">
-              <strong>No se pudo publicar:</strong>
-              <ul>
-                {errores.map((m) => (
-                  <li key={m}>{m}</li>
-                ))}
-              </ul>
+      {puedePublicar && (
+        <section aria-labelledby="titulo-form">
+          <h2 id="titulo-form">Publicar un recurso</h2>
+          <form onSubmit={enviar} noValidate>
+            <div className="campo">
+              <label htmlFor="nombre">Nombre del recurso</label>
+              <input
+                id="nombre"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                aria-invalid={errores.length > 0 && !nombre.trim()}
+                placeholder="Ej.: Calculadora Casio fx-991"
+              />
             </div>
-          )}
 
-          <div role="status" aria-live="polite">
-            {confirmacion && <p className="mensaje ok">{confirmacion}</p>}
-          </div>
+            <div className="campo">
+              <label htmlFor="categoria">Categoría</label>
+              <select
+                id="categoria"
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                aria-invalid={errores.length > 0 && !categoria}
+              >
+                <option value="">Selecciona una categoría</option>
+                {CATEGORIAS.map((c) => (
+                  <option key={c.valor} value={c.valor}>
+                    {c.etiqueta}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <button type="submit" disabled={enviando}>
-            {enviando ? 'Publicando…' : 'Publicar recurso'}
-          </button>
-        </form>
-      </section>
+            {errores.length > 0 && (
+              <div role="alert" className="mensaje error">
+                <strong>No se pudo publicar:</strong>
+                <ul>
+                  {errores.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div role="status" aria-live="polite">
+              {confirmacion && <p className="mensaje ok">{confirmacion}</p>}
+            </div>
+
+            <button type="submit" disabled={enviando}>
+              {enviando ? 'Publicando…' : 'Publicar recurso'}
+            </button>
+          </form>
+        </section>
+      )}
 
       <section aria-labelledby="titulo-catalogo">
         <h2 id="titulo-catalogo">Catálogo</h2>
@@ -285,16 +305,18 @@ export default function App() {
                   <span className="nombre">{r.nombre}</span>
                   <span className="categoria">{etiquetaCategoria(r.categoria)}</span>
                   <span className={`estado ${r.estado}`}>{r.estado === 'disponible' ? 'Disponible' : 'Averiado'}</span>
-                  <button
-                    type="button"
-                    className="secundario"
-                    disabled={r.estado !== 'disponible'}
-                    aria-expanded={recursoElegido === r.id}
-                    aria-label={`Solicitar ${r.nombre}`}
-                    onClick={() => abrirSolicitud(r.id)}
-                  >
-                    Solicitar
-                  </button>
+                  {puedeSolicitar && (
+                    <button
+                      type="button"
+                      className="secundario"
+                      disabled={r.estado !== 'disponible'}
+                      aria-expanded={recursoElegido === r.id}
+                      aria-label={`Solicitar ${r.nombre}`}
+                      onClick={() => abrirSolicitud(r.id)}
+                    >
+                      Solicitar
+                    </button>
+                  )}
                 </div>
 
                 {recursoElegido === r.id && (
@@ -349,26 +371,28 @@ export default function App() {
         </div>
       </section>
 
-      <section aria-labelledby="titulo-solicitudes">
-        <h2 id="titulo-solicitudes">Mis solicitudes</h2>
-        {solicitudes.length === 0 ? (
-          <p className="vacio">Aún no has solicitado ningún recurso. Usa «Solicitar» en el catálogo.</p>
-        ) : (
-          <ul className="catalogo">
-            {solicitudes.map((s) => (
-              <li key={s.id}>
-                <div className="fila fila-solicitud">
-                  <span className="nombre">{s.recursoNombre}</span>
-                  <span className="categoria">
-                    {formatoFecha(s.rango.inicio)} – {formatoFecha(s.rango.fin)}
-                  </span>
-                  <span className={`estado ${s.estado}`}>{s.estado}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {puedeSolicitar && (
+        <section aria-labelledby="titulo-solicitudes">
+          <h2 id="titulo-solicitudes">Mis solicitudes</h2>
+          {solicitudes.length === 0 ? (
+            <p className="vacio">Aún no has solicitado ningún recurso. Usa «Solicitar» en el catálogo.</p>
+          ) : (
+            <ul className="catalogo">
+              {solicitudes.map((s) => (
+                <li key={s.id}>
+                  <div className="fila fila-solicitud">
+                    <span className="nombre">{s.recursoNombre}</span>
+                    <span className="categoria">
+                      {formatoFecha(s.rango.inicio)} – {formatoFecha(s.rango.fin)}
+                    </span>
+                    <span className={`estado ${s.estado}`}>{s.estado.replaceAll('_', ' ')}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </main>
   )
 }
