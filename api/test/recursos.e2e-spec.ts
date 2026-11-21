@@ -1,24 +1,43 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { ExecutionContext, INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
-import { RecursosService } from './../src/recursos/recursos.service.js';
+import { AuthGuard } from './../src/auth/auth.guard.js';
+import { RecursosPgService } from './../src/recursos/recursos.pg.service.js';
+import { RecursosService, type FiltrosRecursos } from './../src/recursos/recursos.service.js';
 
 // Pruebas por HTTP: comprueban que el controlador lee bien el body y los query params
 // y que los errores salen como 400 (nunca 500).
+// No usan Supabase: el guard y el servicio de Postgres se reemplazan por dobles en memoria.
 describe('Recursos (e2e)', () => {
   let app: INestApplication<App>;
   let servicio: RecursosService;
 
   beforeEach(async () => {
+    const memoria = new RecursosService();
+    const usuarioFalso = { id: 1, nombre: 'Carlos Vaca', rol: 'propietario' };
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({
+        canActivate: (contexto: ExecutionContext) => {
+          contexto.switchToHttp().getRequest().usuario = usuarioFalso;
+          return true;
+        },
+      })
+      .overrideProvider(RecursosPgService)
+      .useValue({
+        crear: async (datos: object | undefined) => memoria.crear({ ...datos, propietarioId: usuarioFalso.id }),
+        listar: async (filtros: FiltrosRecursos) => memoria.listar(filtros),
+      })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    servicio = app.get(RecursosService);
+    servicio = memoria;
   });
 
   afterEach(async () => {

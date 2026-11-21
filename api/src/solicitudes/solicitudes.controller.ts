@@ -1,21 +1,23 @@
-import { Body, Controller, Get, Inject, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
+import { AuthGuard, type Usuario } from '../auth/auth.guard.js';
+import { UsuarioActual } from '../auth/usuario.decorator.js';
 import type { CrearSolicitudDto } from './solicitud.js';
-import { SolicitudesService } from './solicitudes.service.js';
+import { SolicitudesPgService } from './solicitudes.pg.service.js';
 
 @Controller('solicitudes')
+@UseGuards(AuthGuard)
 export class SolicitudesController {
-  constructor(@Inject(SolicitudesService) private readonly solicitudes: SolicitudesService) {}
+  constructor(@Inject(SolicitudesPgService) private readonly solicitudes: SolicitudesPgService) {}
 
-  // POST /solicitudes  { recursoId, inicio, fin, solicitanteId }
+  // POST /solicitudes  { recursoId, inicio, fin }   (el solicitante sale del token)
   @Post()
-  crear(@Body() datos: CrearSolicitudDto) {
-    return this.solicitudes.crear(datos);
+  crear(@Body() datos: CrearSolicitudDto, @UsuarioActual() usuario: Usuario) {
+    return this.solicitudes.crear(datos, usuario);
   }
 
-  // GET /solicitudes?solicitanteId=2
+  // GET /solicitudes   → las solicitudes de la persona autenticada
   @Get()
-  listar(@Query('solicitanteId') solicitanteId?: string) {
-    const id = solicitanteId === undefined || solicitanteId === '' ? undefined : Number(solicitanteId);
-    return this.solicitudes.listar({ solicitanteId: Number.isNaN(id) ? undefined : id });
+  listar(@UsuarioActual() usuario: Usuario) {
+    return this.solicitudes.listar(usuario);
   }
 }

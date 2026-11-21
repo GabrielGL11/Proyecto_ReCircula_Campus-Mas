@@ -1,14 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { esCategoria, type CrearRecursoDto, type Recurso } from './recurso.js';
+import type { CrearRecursoDto, Recurso } from './recurso.js';
 import { seSuperpone, type Rango } from './rango.js';
+import { validarFiltroFechas, validarNombreYCategoria } from './validar.js';
 
 export interface FiltrosRecursos {
   categoria?: string;
   desde?: string;
   hasta?: string;
 }
-
-const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 @Injectable()
 export class RecursosService {
@@ -22,23 +21,11 @@ export class RecursosService {
   // se valida todo aquí para responder siempre 400 y nunca 500.
   crear(datos: CrearRecursoDto | undefined): Recurso {
     const { nombre, categoria, propietarioId } = datos ?? ({} as CrearRecursoDto);
-    const errores: string[] = [];
-
-    let nombreLimpio = '';
-    if (typeof nombre === 'string') {
-      nombreLimpio = nombre.trim();
-      if (!nombreLimpio) errores.push('El nombre es obligatorio.');
-    } else if (nombre === undefined || nombre === null) {
-      errores.push('El nombre es obligatorio.');
-    } else {
-      errores.push('El nombre debe ser texto.');
-    }
-
-    if (categoria === undefined || categoria === null || categoria === '') {
-      errores.push('La categoría es obligatoria.');
-    } else if (!esCategoria(categoria)) {
-      errores.push('La categoría no es válida.');
-    }
+    const {
+      errores,
+      nombre: nombreLimpio,
+      categoria: categoriaValida,
+    } = validarNombreYCategoria(nombre, categoria);
 
     // TODO(JWT): el propietario saldrá del token, no del body.
     let propietario = 0;
@@ -50,12 +37,12 @@ export class RecursosService {
       }
     }
 
-    if (errores.length > 0 || !esCategoria(categoria)) throw new BadRequestException(errores);
+    if (errores.length > 0 || !categoriaValida) throw new BadRequestException(errores);
 
     const recurso: Recurso = {
       id: this.siguienteId++,
       nombre: nombreLimpio,
-      categoria,
+      categoria: categoriaValida,
       estado: 'disponible',
       propietarioId: propietario,
     };
@@ -84,11 +71,8 @@ export class RecursosService {
   }
 
   private leerRango({ desde, hasta }: FiltrosRecursos): Rango | null {
-    if (!desde && !hasta) return null;
-    if (!desde || !hasta) throw new BadRequestException(['Indica la fecha inicial y la final.']);
-    const valida = (f: string) => FECHA_ISO.test(f) && !Number.isNaN(Date.parse(f));
-    if (!valida(desde) || !valida(hasta)) throw new BadRequestException(['Las fechas no son válidas (usa AAAA-MM-DD).']);
-    if (hasta < desde) throw new BadRequestException(['La fecha final no puede ser anterior a la inicial.']);
-    return { inicio: desde, fin: hasta };
+    const { rango, error } = validarFiltroFechas(desde, hasta);
+    if (error) throw new BadRequestException([error]);
+    return rango;
   }
 }
