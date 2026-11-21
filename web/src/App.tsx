@@ -1,6 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
-import { CATEGORIAS, listarRecursos, publicarRecurso, type Filtros, type Recurso } from './api.ts'
+import './solicitudes.css'
+import {
+  CATEGORIAS,
+  crearSolicitud,
+  listarRecursos,
+  listarSolicitudes,
+  publicarRecurso,
+  type Filtros,
+  type Recurso,
+  type Solicitud,
+} from './api.ts'
+
+// Mientras no exista el inicio de sesión (JWT), la persona que solicita es fija.
+const SOLICITANTE_ID = 2
+
+const formatoFecha = (iso: string) => iso.split('-').reverse().join('/')
 
 const etiquetaCategoria = (valor: string) =>
   CATEGORIAS.find((c) => c.valor === valor)?.etiqueta ?? valor
@@ -28,6 +43,62 @@ export default function App() {
   // anterior (porque el usuario pulsó Buscar dos veces seguidas), se ignora.
   const ultimaPeticion = useRef(0)
 
+  // Solicitud de préstamo (HU-03)
+  const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
+  const [recursoElegido, setRecursoElegido] = useState<number | null>(null)
+  const [inicioSolicitud, setInicioSolicitud] = useState('')
+  const [finSolicitud, setFinSolicitud] = useState('')
+  const [erroresSolicitud, setErroresSolicitud] = useState<string[]>([])
+  const [confirmacionSolicitud, setConfirmacionSolicitud] = useState<string | null>(null)
+  const [enviandoSolicitud, setEnviandoSolicitud] = useState(false)
+
+  async function cargarSolicitudes() {
+    try {
+      setSolicitudes(await listarSolicitudes(SOLICITANTE_ID))
+    } catch {
+      setSolicitudes([])
+    }
+  }
+
+  function abrirSolicitud(id: number) {
+    setRecursoElegido(id)
+    setInicioSolicitud(desde)
+    setFinSolicitud(hasta)
+    setErroresSolicitud([])
+    setConfirmacionSolicitud(null)
+  }
+
+  function cancelarSolicitud() {
+    setRecursoElegido(null)
+    setErroresSolicitud([])
+  }
+
+  async function solicitar(e: FormEvent) {
+    e.preventDefault()
+    if (recursoElegido === null) return
+    setEnviandoSolicitud(true)
+    setErroresSolicitud([])
+    setConfirmacionSolicitud(null)
+    try {
+      const nueva = await crearSolicitud({
+        recursoId: recursoElegido,
+        inicio: inicioSolicitud,
+        fin: finSolicitud,
+        solicitanteId: SOLICITANTE_ID,
+      })
+      setConfirmacionSolicitud(
+        `Solicitud enviada: «${nueva.recursoNombre}» del ${formatoFecha(nueva.rango.inicio)} al ${formatoFecha(nueva.rango.fin)}. Queda pendiente de aprobación.`,
+      )
+      setRecursoElegido(null)
+      await cargarSolicitudes()
+    } catch (err) {
+      // Los datos escritos se conservan para poder corregirlos (RNF-02).
+      setErroresSolicitud(Array.isArray(err) ? (err as string[]) : ['No se pudo enviar la solicitud.'])
+    } finally {
+      setEnviandoSolicitud(false)
+    }
+  }
+
   async function cargar(filtros: Filtros = {}) {
     const miPeticion = ++ultimaPeticion.current
     const vigente = () => miPeticion === ultimaPeticion.current
@@ -45,6 +116,7 @@ export default function App() {
 
   useEffect(() => {
     void cargar()
+    void cargarSolicitudes()
   }, [])
 
   async function enviar(e: FormEvent) {
@@ -209,9 +281,89 @@ export default function App() {
           <ul className="catalogo">
             {recursos.map((r) => (
               <li key={r.id}>
-                <span className="nombre">{r.nombre}</span>
-                <span className="categoria">{etiquetaCategoria(r.categoria)}</span>
-                <span className={`estado ${r.estado}`}>{r.estado === 'disponible' ? 'Disponible' : 'Averiado'}</span>
+                <div className="fila">
+                  <span className="nombre">{r.nombre}</span>
+                  <span className="categoria">{etiquetaCategoria(r.categoria)}</span>
+                  <span className={`estado ${r.estado}`}>{r.estado === 'disponible' ? 'Disponible' : 'Averiado'}</span>
+                  <button
+                    type="button"
+                    className="secundario"
+                    disabled={r.estado !== 'disponible'}
+                    aria-expanded={recursoElegido === r.id}
+                    aria-label={`Solicitar ${r.nombre}`}
+                    onClick={() => abrirSolicitud(r.id)}
+                  >
+                    Solicitar
+                  </button>
+                </div>
+
+                {recursoElegido === r.id && (
+                  <form onSubmit={solicitar} noValidate className="solicitud">
+                    <div className="campo">
+                      <label htmlFor={`inicio-${r.id}`}>Inicio</label>
+                      <input
+                        id={`inicio-${r.id}`}
+                        type="date"
+                        value={inicioSolicitud}
+                        onChange={(e) => setInicioSolicitud(e.target.value)}
+                        aria-invalid={erroresSolicitud.length > 0 && !inicioSolicitud}
+                      />
+                    </div>
+                    <div className="campo">
+                      <label htmlFor={`fin-${r.id}`}>Fin</label>
+                      <input
+                        id={`fin-${r.id}`}
+                        type="date"
+                        value={finSolicitud}
+                        onChange={(e) => setFinSolicitud(e.target.value)}
+                        aria-invalid={erroresSolicitud.length > 0 && !finSolicitud}
+                      />
+                    </div>
+                    <div className="acciones">
+                      <button type="submit" disabled={enviandoSolicitud}>
+                        {enviandoSolicitud ? 'Enviando…' : 'Enviar solicitud'}
+                      </button>
+                      <button type="button" className="secundario" onClick={cancelarSolicitud}>
+                        Cancelar
+                      </button>
+                    </div>
+                    {erroresSolicitud.length > 0 && (
+                      <div role="alert" className="mensaje error">
+                        <strong>No se pudo enviar la solicitud:</strong>
+                        <ul>
+                          {erroresSolicitud.map((m) => (
+                            <li key={m}>{m}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div role="status" aria-live="polite">
+          {confirmacionSolicitud && <p className="mensaje ok">{confirmacionSolicitud}</p>}
+        </div>
+      </section>
+
+      <section aria-labelledby="titulo-solicitudes">
+        <h2 id="titulo-solicitudes">Mis solicitudes</h2>
+        {solicitudes.length === 0 ? (
+          <p className="vacio">Aún no has solicitado ningún recurso. Usa «Solicitar» en el catálogo.</p>
+        ) : (
+          <ul className="catalogo">
+            {solicitudes.map((s) => (
+              <li key={s.id}>
+                <div className="fila fila-solicitud">
+                  <span className="nombre">{s.recursoNombre}</span>
+                  <span className="categoria">
+                    {formatoFecha(s.rango.inicio)} – {formatoFecha(s.rango.fin)}
+                  </span>
+                  <span className={`estado ${s.estado}`}>{s.estado}</span>
+                </div>
               </li>
             ))}
           </ul>

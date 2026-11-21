@@ -41,8 +41,6 @@ export async function listarRecursos(filtros: Filtros = {}): Promise<Recurso[]> 
   return res.json()
 }
 
-// TODO(JWT): cuando haya autenticación, el propietario lo deduce la API del token
-// y `propietarioId` deja de enviarse desde aquí.
 export async function publicarRecurso(datos: {
   nombre: string
   categoria: string
@@ -53,6 +51,36 @@ export async function publicarRecurso(datos: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos),
   })
+  if (!res.ok) throw await leerError(res)
+  return res.json()
+}
+
+export interface Solicitud {
+  id: number
+  recursoId: number
+  recursoNombre: string
+  solicitanteId: number
+  rango: { inicio: string; fin: string }
+  estado: 'pendiente' | 'confirmada' | 'rechazada' | 'devuelta'
+}
+
+export async function crearSolicitud(datos: {
+  recursoId: number
+  inicio: string
+  fin: string
+  solicitanteId: number
+}): Promise<Solicitud> {
+  const res = await fetch('/api/solicitudes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  })
+  if (!res.ok) throw await leerError(res)
+  return res.json()
+}
+
+export async function listarSolicitudes(solicitanteId: number): Promise<Solicitud[]> {
+  const res = await fetch(`/api/solicitudes?solicitanteId=${solicitanteId}`)
   if (!res.ok) throw await leerError(res)
   return res.json()
 }

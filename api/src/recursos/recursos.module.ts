@@ -5,5 +5,6 @@ import { RecursosService } from './recursos.service.js';
 @Module({
   controllers: [RecursosController],
   providers: [RecursosService],
+  exports: [RecursosService],
 })
 export class RecursosModule {}
