@@ -11,8 +11,8 @@ Software 5° "B", ULEAM. Se trabaja con Kanban y XP.
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `api/` | Backend: NestJS (ESM) + Vitest | Módulo `recursos` (HU-01 y HU-02), datos en memoria |
-| `web/` | Frontend: Vite + React + TypeScript | Formulario, catálogo y búsqueda por categoría/fechas (HU-01 y HU-02) |
+| `api/` | Backend: NestJS (ESM) + Vitest | Módulos `recursos` (HU-01 y HU-02) y `solicitudes` (HU-03), datos en memoria |
+| `web/` | Frontend: Vite + React + TypeScript | Formulario, catálogo, filtros y solicitudes de préstamo (HU-01, HU-02 y HU-03) |
 | `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente |
 
 Tecnologías previstas, aún sin instalar: TypeORM + PostgreSQL y JWT en `api/`,
@@ -56,6 +56,13 @@ npm run build       # compilación de producción
 El frontend usa un proxy de Vite: las llamadas a `/api/*` van a `http://localhost:4200`.
 Por ahora los datos se guardan en memoria y se pierden al reiniciar la API.
 
+## API (HU-03)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/solicitudes` | Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`, `solicitanteId`). Con fechas válidas queda `pendiente`. Rechaza (400) fin anterior al inicio, fechas faltantes o inválidas y recursos averiados; 404 si el recurso no existe. |
+| GET | `/solicitudes` | Lista las solicitudes. Filtro opcional: `solicitanteId`. |
+
 ## Deuda técnica
 
 - **`propietarioId` lo manda el cliente** (el frontend lo fija en 1). Es inseguro: cuando se
@@ -95,5 +102,6 @@ historia separada y quedó absorbida por HU-11).
 - [x] Proyectos base de NestJS y Vite + React funcionando
 - [ ] HU-01: publicar recurso (en revisión; datos en memoria)
 - [ ] HU-02: consultar disponibilidad por categoría y fechas (en revisión; datos en memoria)
+- [ ] HU-03: solicitar préstamo (datos en memoria)
 - [ ] Integración continua con GitHub Actions
 - [ ] Conexión a PostgreSQL con TypeORM

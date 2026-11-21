@@ -77,6 +77,11 @@ export class RecursosService {
     );
   }
 
+  // HU-03: la solicitud necesita comprobar que el recurso existe y está disponible.
+  buscarPorId(id: number): Recurso | undefined {
+    return this.recursos.find((r) => r.id === id);
+  }
+
   // Lo usará HU-04 cuando un préstamo quede "confirmado".
   bloquearFechas(recursoId: number, rango: Rango): void {
     this.ocupaciones.push({ recursoId, rango });
