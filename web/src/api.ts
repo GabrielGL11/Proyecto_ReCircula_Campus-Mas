@@ -1,3 +1,5 @@
+import { ErrorApi, apiFetch } from './api-auth.ts'
+
 export const CATEGORIAS = [
   { valor: 'calculadora', etiqueta: 'Calculadora' },
   { valor: 'cable', etiqueta: 'Cable' },
@@ -10,18 +12,8 @@ export interface Recurso {
   id: number
   nombre: string
   categoria: string
-  estado: 'disponible' | 'averiado'
+  estado: 'disponible' | 'averiado' | 'retirado'
   propietarioId: number
-}
-
-async function leerError(res: Response): Promise<string[]> {
-  try {
-    const cuerpo = await res.json()
-    const msg = cuerpo.message
-    return Array.isArray(msg) ? msg : [String(msg ?? 'Error inesperado.')]
-  } catch {
-    return ['Error inesperado. Intenta de nuevo.']
-  }
 }
 
 export interface Filtros {
@@ -30,29 +22,29 @@ export interface Filtros {
   hasta?: string
 }
 
-export async function listarRecursos(filtros: Filtros = {}): Promise<Recurso[]> {
+// Las pantallas esperan un arreglo de mensajes en español (string[]), así que el ErrorApi
+// de apiFetch se convierte aquí. Cualquier otro fallo (API apagada, sin red) pasa tal cual.
+async function conMensajes<T>(peticion: Promise<T>): Promise<T> {
+  try {
+    return await peticion
+  } catch (error) {
+    if (error instanceof ErrorApi) throw error.mensajes
+    throw error
+  }
+}
+
+export function listarRecursos(filtros: Filtros = {}): Promise<Recurso[]> {
   const params = new URLSearchParams()
   if (filtros.categoria) params.set('categoria', filtros.categoria)
   if (filtros.desde) params.set('desde', filtros.desde)
   if (filtros.hasta) params.set('hasta', filtros.hasta)
   const consulta = params.toString()
-  const res = await fetch(`/api/recursos${consulta ? `?${consulta}` : ''}`)
-  if (!res.ok) throw await leerError(res)
-  return res.json()
+  return conMensajes(apiFetch<Recurso[]>(`/recursos${consulta ? `?${consulta}` : ''}`))
 }
 
-export async function publicarRecurso(datos: {
-  nombre: string
-  categoria: string
-  propietarioId: number
-}): Promise<Recurso> {
-  const res = await fetch('/api/recursos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(datos),
-  })
-  if (!res.ok) throw await leerError(res)
-  return res.json()
+// El propietario sale del token en la API: ya no se manda propietarioId.
+export function publicarRecurso(datos: { nombre: string; categoria: string }): Promise<Recurso> {
+  return conMensajes(apiFetch<Recurso>('/recursos', { method: 'POST', body: JSON.stringify(datos) }))
 }
 
 export interface Solicitud {
@@ -61,26 +53,26 @@ export interface Solicitud {
   recursoNombre: string
   solicitanteId: number
   rango: { inicio: string; fin: string }
-  estado: 'pendiente' | 'confirmada' | 'rechazada' | 'devuelta'
+  estado: 'pendiente' | 'confirmada' | 'rechazada' | 'devuelta' | 'en_espera_mantenimiento'
 }
 
-export async function crearSolicitud(datos: {
-  recursoId: number
-  inicio: string
-  fin: string
-  solicitanteId: number
-}): Promise<Solicitud> {
-  const res = await fetch('/api/solicitudes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(datos),
-  })
-  if (!res.ok) throw await leerError(res)
-  return res.json()
+// El solicitante sale del token en la API: ya no se manda solicitanteId.
+export function crearSolicitud(datos: { recursoId: number; inicio: string; fin: string }): Promise<Solicitud> {
+  return conMensajes(apiFetch<Solicitud>('/solicitudes', { method: 'POST', body: JSON.stringify(datos) }))
 }
 
-export async function listarSolicitudes(solicitanteId: number): Promise<Solicitud[]> {
-  const res = await fetch(`/api/solicitudes?solicitanteId=${solicitanteId}`)
-  if (!res.ok) throw await leerError(res)
-  return res.json()
+// Devuelve las solicitudes de la persona con sesión iniciada.
+export function listarSolicitudes(): Promise<Solicitud[]> {
+  return conMensajes(apiFetch<Solicitud[]>('/solicitudes'))
+}
+
+export interface Usuario {
+  id: number
+  nombre: string
+  rol: 'solicitante' | 'propietario' | 'coordinador'
+}
+
+// Quién es la persona con sesión iniciada y qué rol tiene (GET /auth/yo).
+export function obtenerUsuario(): Promise<Usuario> {
+  return conMensajes(apiFetch<Usuario>('/auth/yo'))
 }

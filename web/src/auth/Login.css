@@ -1,0 +1,11 @@
+/* Colores con contraste mínimo 4,5:1 (RNF-01) */
+.login { max-width: 22rem; margin: 3rem auto; padding: 0 1rem; color: #1a1a1a; }
+.login form { display: grid; gap: 0.5rem; background: #fff; border: 1px solid #767676; border-radius: 0.5rem; padding: 1.25rem; }
+.login label { font-weight: 600; }
+.login input { padding: 0.55rem; border: 1px solid #595959; border-radius: 0.35rem; font-size: 1rem; background: #fff; color: #1a1a1a; }
+.login input[aria-invalid='true'] { border-color: #b00020; }
+.login :is(input, button):focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
+.login button { margin-top: 0.5rem; padding: 0.65rem; border: 0; border-radius: 0.35rem; background: #0b57d0; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
+.login button:disabled { background: #595959; cursor: progress; }
+.login-error { color: #b00020; font-weight: 600; margin: 0; }
+.login h1 { line-height: 1.2; text-align: center; font-size: 2rem; margin: 0 0 1rem; }
