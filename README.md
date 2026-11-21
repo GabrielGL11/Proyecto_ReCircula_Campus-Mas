@@ -1,22 +1,18 @@
 # ReCircula Campus
 
-Aplicación web para prestar y reparar recursos tecnológicos del campus
-(calculadoras, periféricos y kits estudiantiles) y así reducir compras
-innecesarias y residuos.
+Aplicación web para prestar y reparar recursos tecnológicos del campus (calculadoras, periféricos y kits estudiantiles) y así reducir compras innecesarias y residuos.
 
-Proyecto de **Modelado Ágil de Software** (IS-505, 2026-2, Paralelo B),
-Software 5° "B", ULEAM. Se trabaja con Kanban y XP.
+Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5° "B", ULEAM. Se trabaja con Kanban y XP.
 
 ## Estructura
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `api/` | Backend: NestJS (ESM) + Vitest | Módulos `recursos` (HU-01 y HU-02) y `solicitudes` (HU-03), datos en memoria |
+| `api/` | Backend: NestJS (ESM) + Vitest | Módulos recursos (HU-01 y HU-02) y solicitudes (HU-03), datos en memoria |
 | `web/` | Frontend: Vite + React + TypeScript | Formulario, catálogo, filtros y solicitudes de préstamo (HU-01, HU-02 y HU-03) |
-| `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente |
+| `.github/workflows/` | Integración continua (GitHub Actions) | Pendiente en este repositorio (ver [Práctica DevOps](#práctica-devops-is-505)) |
 
-Tecnologías previstas, aún sin instalar: TypeORM + PostgreSQL y JWT en `api/`,
-React Router en `web/`.
+Tecnologías previstas, aún sin instalar: TypeORM + PostgreSQL y JWT en `api/`, React Router en `web/`.
 
 ## Requisitos
 
@@ -52,40 +48,67 @@ npm run build       # compilación de producción
 | POST | `/recursos` | Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible". Un body inválido (campos de otro tipo, ausente, categoría desconocida) responde 400 con la lista de errores. |
 | GET | `/recursos` | Lista el catálogo. Filtros opcionales (HU-02): `categoria`, `desde` y `hasta` (AAAA-MM-DD); con fechas excluye recursos con préstamo confirmado en ese rango. |
 
-El frontend usa un proxy de Vite: las llamadas a `/api/*` van a `http://localhost:4200`.
-Por ahora los datos se guardan en memoria y se pierden al reiniciar la API.
+El frontend usa un proxy de Vite: las llamadas a `/api/*` van a `http://localhost:4200`. Por ahora los datos se guardan en memoria y se pierden al reiniciar la API.
 
 ## API (HU-03)
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/solicitudes` | Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`, `solicitanteId`). Con fechas válidas queda `pendiente`. Rechaza (400) fin anterior al inicio, fechas faltantes o inválidas y recursos averiados; 404 si el recurso no existe. |
+| POST | `/solicitudes` | Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`, `solicitanteId`). Con fechas válidas queda pendiente. Rechaza (400) fin anterior al inicio, fechas faltantes o inválidas y recursos averiados; 404 si el recurso no existe. |
 | GET | `/solicitudes` | Lista las solicitudes. Filtro opcional: `solicitanteId`. |
 
 ## Deuda técnica
 
-- **`propietarioId` lo manda el cliente** (el frontend lo fija en 1). Es inseguro: cuando se
-  implemente JWT, el propietario debe salir del token y quitarse del body. Está marcado con
-  `TODO(JWT)` en el código.
+`propietarioId` lo manda el cliente (el frontend lo fija en 1). Es inseguro: cuando se implemente JWT, el propietario debe salir del token y quitarse del body. Está marcado con `TODO(JWT)` en el código.
 
 ## Tablero Kanban
 
-https://github.com/users/GabrielGL11/projects/1
+<https://github.com/users/GabrielGL11/projects/1>
 
-Columnas: Backlog, Por hacer, En desarrollo (WIP máx. 2), En revisión,
-Pruebas (WIP máx. 2) y Hecho. Cada historia es un issue del repositorio y
-aparece como tarjeta en el tablero.
+Columnas: Backlog, Por hacer, En desarrollo (WIP máx. 2), En revisión, Pruebas (WIP máx. 2) y Hecho. Cada historia es un issue del repositorio y aparece como tarjeta en el tablero.
 
-## Backlog
+### Backlog
 
-Historias cargadas: HU-01 a HU-08, HU-10 y HU-11 (HU-09 se descartó como
-historia separada y quedó absorbida por HU-11).
+Historias cargadas: HU-01 a HU-08, HU-10 y HU-11 (HU-09 se descartó como historia separada y quedó absorbida por HU-11).
 
 | Incremento | Historias |
 |---|---|
 | 1 | HU-01, HU-02, HU-03 |
 | 2 | HU-04, HU-05, HU-06, HU-11 |
 | 3 | HU-07, HU-08, HU-10 |
+
+## Trazabilidad: historia, pull request y prueba
+
+Cada historia se integra mediante pull request revisado por un compañero del equipo.
+
+| Historia | Pull requests fusionados | Pruebas que la respaldan |
+|---|---|---|
+| HU-01: Publicar recurso | #14, #16 y #17 (robustez, categorías únicas y pruebas de controlador) | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
+| HU-02: Consultar disponibilidad | #15 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
+| HU-03: Solicitar préstamo | #18 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
+
+Lista de pull requests: <https://github.com/GabrielGL11/Proyecto_ReCircula_Campus-Mas/pulls?q=is%3Apr+state%3Aclosed>
+
+## Práctica DevOps (IS-505)
+
+La práctica «GitHub Actions, pruebas y despliegue» se construyó y se demostró en un repositorio aparte, con autorización del docente, aplicando las mismas prácticas de XP (integración continua, pruebas y revisión entre pares) que usa este proyecto:
+
+- **Repositorio:** <https://github.com/GabrielGL11/Cardinova-react-supabase> (rama `devops-nube-practica`)
+- **Workflow:** `.github/workflows/ci-cd.yml` — job `ci` (lint, pruebas con Vitest y build) y job `deploy` (S3 + CloudFront), que solo corre si `ci` pasa.
+- **Fallo controlado y corrección:** ejecuciones #4 (roja) y #5 (verde); despliegue real en la ejecución #7.
+- **Revisión entre pares:** pull requests #1 y #2, aprobados por un compañero.
+- **Historias de la práctica:** issues #3, #4 y #5 del repositorio de la práctica.
+- **Aplicación desplegada:** <https://dfez6xsgo6ub2.cloudfront.net>
+- **Evidencias y demostración:** carpetas compartidas en Google Drive, indicadas en el informe.
+
+### Integración continua en este repositorio
+
+Pendiente. El diseño previsto es un workflow de GitHub Actions con dos jobs, que se ejecuta en cada push y pull request:
+
+| Job | Pasos |
+|---|---|
+| `api` | `npm ci`, `npm test`, `npm run test:e2e` y `npm run build` |
+| `web` | `npm ci` y `npm run build` |
 
 ## Equipo
 
@@ -99,8 +122,9 @@ historia separada y quedó absorbida por HU-11).
 - [x] Repositorio y estructura `api/` y `web/`
 - [x] Tablero Kanban público con 10 historias en Backlog
 - [x] Proyectos base de NestJS y Vite + React funcionando
-- [ ] HU-01: publicar recurso (en revisión; datos en memoria)
-- [ ] HU-02: consultar disponibilidad por categoría y fechas (en revisión; datos en memoria)
-- [ ] HU-03: solicitar préstamo (datos en memoria)
-- [ ] Integración continua con GitHub Actions
+- [x] HU-01: publicar recurso (PR #14, #16 y #17 fusionados; datos en memoria)
+- [x] HU-02: consultar disponibilidad por categoría y fechas (PR #15 fusionado; datos en memoria)
+- [x] HU-03: solicitar préstamo (PR #18 fusionado; datos en memoria)
+- [x] Práctica DevOps con GitHub Actions y despliegue en AWS (repositorio de la práctica)
+- [ ] Integración continua con GitHub Actions en este repositorio
 - [ ] Conexión a PostgreSQL con TypeORM
