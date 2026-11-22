@@ -305,3 +305,31 @@ describe('SolicitudesPgService: solicitudes pendientes por decidir (HU-04)', () 
     expect(query).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// HU-03 (pendiente heredado del PR #18): la misma persona no puede repetir una solicitud pendiente
+// idéntica (mismo recurso y mismas fechas). Se resuelve en la API, sin tocar triggers de la base.
+// ---------------------------------------------------------------------------------------------
+describe('SolicitudesPgService: duplicados pendientes (HU-03)', () => {
+  it('rechaza con 400 y mensaje claro si ya hay una pendiente idéntica del mismo solicitante', async () => {
+    const { db, clienteQuery } = crearDbFalsa();
+    clienteQuery.mockResolvedValueOnce({ rows: [] }); // la base no insertó nada: ya existía una igual
+    const error = await new SolicitudesPgService(db)
+      .crear({ recursoId: 6, inicio: '2026-11-20', fin: '2026-11-22' }, ana)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as BadRequestException).getResponse()).toMatchObject({
+      message: ['Ya tienes una solicitud pendiente para este recurso en esas fechas.'],
+    });
+  });
+
+  it('solo cuenta como duplicada una solicitud PENDIENTE del mismo solicitante, recurso y fechas', async () => {
+    const { db, clienteQuery } = crearDbFalsa();
+    await new SolicitudesPgService(db).crear({ recursoId: 6, inicio: '2026-11-20', fin: '2026-11-22' }, ana);
+    const sql = clienteQuery.mock.calls[0][0] as string;
+    expect(sql).toContain('not exists');
+    expect(sql).toContain("estado = 'pendiente'");
+    expect(sql).toContain('solicitante_id = $2');
+  });
+});
