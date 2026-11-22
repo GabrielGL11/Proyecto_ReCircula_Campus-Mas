@@ -1,5 +1,5 @@
 import { esCategoria, type Categoria } from './recurso.js';
-import type { Rango } from './rango.js';
+import { esFechaIso, type Rango } from './rango.js';
 
 // Validaciones puras (sin Nest ni base de datos). Las usan el servicio en memoria y el de Postgres.
 
@@ -34,8 +34,7 @@ const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 export function validarFiltroFechas(desde?: string, hasta?: string): { rango: Rango | null; error?: string } {
   if (!desde && !hasta) return { rango: null };
   if (!desde || !hasta) return { rango: null, error: 'Indica la fecha inicial y la final.' };
-  const valida = (f: string) => FECHA_ISO.test(f) && !Number.isNaN(Date.parse(f));
-  if (!valida(desde) || !valida(hasta)) {
+  if (!esFechaIso(desde) || !esFechaIso(hasta)) {
     return { rango: null, error: 'Las fechas no son válidas (usa AAAA-MM-DD).' };
   }
   if (hasta < desde) return { rango: null, error: 'La fecha final no puede ser anterior a la inicial.' };
