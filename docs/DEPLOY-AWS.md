@@ -18,7 +18,7 @@ Sustituye `<CUENTA>`, `<REGION>`, `<BUCKET>` y `<DIST_ID>` por tus valores.
 - Default root object: `index.html`.
 - Viewer protocol policy: Redirect HTTP to HTTPS.
 - Cache policy: `CachingOptimized`.
-- **Custom error responses** (la web es una SPA): códigos `403` y `404` → respuesta `/index.html` con código `200`.
+- **Rutas de la SPA:** una CloudFront Function en el behavior por defecto (`recircula-spa`, en [`cloudfront-functions.js`](cloudfront-functions.js)) devuelve `index.html` para las rutas sin extensión. Antes se usaban *Custom error responses* 403/404 → `/index.html`, pero ya no: tapan los errores reales de la API (ver sección 7).
 
 Al crearla, AWS ofrece copiar la política del bucket para OAC. Equivale a:
 
@@ -115,7 +115,7 @@ Problemas típicos:
 | `AccessDenied` al abrir el sitio | Falta la política del bucket para OAC |
 | Pantalla en blanco | Faltan las variables `VITE_SUPABASE_*` en GitHub |
 | `AccessDenied` en `wait invalidation-completed` | Falta `cloudfront:GetInvalidation` en el rol |
-| La prueba de humo dice "ruta interna de la SPA respondió 403/404" | Faltan las respuestas de error personalizadas (403 y 404 → `/index.html` con 200) |
+| La prueba de humo dice "ruta interna de la SPA respondió 403/404" | Falta asociar la función `recircula-spa` al behavior por defecto (Viewer request) |
 | La prueba de humo dice "el bucket respondió 200" | El bucket es público: activa Block all public access |
 
 ## 6. Volver a una versión estable (rollback)
@@ -132,20 +132,10 @@ Se puede volver a cualquier commit que ya se haya desplegado antes (contiene `sc
 
 ## 7. Y la API
 
-La web llama a `/api/...` (en desarrollo, el proxy de Vite lo manda a `localhost:4200`). En producción necesita una API desplegada aparte (AWS App Runner, Lambda con function URL, Elastic Beanstalk, ECS, o Render/Railway) con `DATABASE_URL`, `SUPABASE_URL` y `SUPABASE_KEY` como variables de entorno del servicio.
-
-Para mantener el mismo dominio y sin CORS, en CloudFront agrega un segundo origin (la API) y un behavior `/api/*` hacia él, con una **CloudFront Function** (viewer request) que quite el prefijo `/api`, igual que hace el proxy de Vite:
-
-```js
-function handler(event) {
-  var r = event.request;
-  r.uri = r.uri.replace(/^\/api/, '') || '/';
-  return r;
-}
-```
-
-Para ese behavior usa la cache policy `CachingDisabled` y la origin request policy `AllViewerExceptHostHeader` (para que pase el `Authorization`).
+La web llama a `/api/...` (en desarrollo, el proxy de Vite lo manda a `localhost:4200`). En producción la API corre en **AWS Lambda** (imagen de contenedor con Function URL) y CloudFront le envía `/api/*` con un segundo origin y un behavior propio. Los pasos completos (imagen en ECR, función, variables de entorno, CloudFront Functions, behavior y verificación) están en [`DEPLOY-API-AWS.md`](DEPLOY-API-AWS.md).
 
 Cuando la API esté arriba, define la variable `API_URL` = `https://<tu-dominio>/api` y la verificación comprobará `GET /` (200) y `GET /recursos` sin sesión (401).
+
+Importante: con la API detrás de la misma distribución **no** debe haber respuestas de error personalizadas 403/404 → `/index.html`, porque taparían los 403/404 reales de la API. Las rutas de la SPA las resuelve la función `recircula-spa` (ver la guía de la API).
 
 Antes de ir a producción: en `api/src/db/db.service.ts` cambia `ssl: { rejectUnauthorized: false }` por verificación real del certificado (ya está anotado en el README).
