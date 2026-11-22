@@ -41,8 +41,9 @@ const DECISIONES: Record<Accion, { funcion: string; sinPermiso: string }> = {
   },
 };
 
-// HU-03 sobre Postgres (Supabase). Las reglas viven en la base (trigger trg_solicitud_insert):
-// fin >= inicio (R2), recurso existente, no averiado, no retirado y estado inicial "pendiente".
+// HU-03 y HU-04 sobre Postgres (Supabase). Las reglas viven en la base (trigger trg_solicitud_insert y
+// funciones aprobar/rechazar): fin >= inicio (R2), recurso existente, no averiado, no retirado, sin superposición (R1).
+// La API añade lo que la base no decide: duplicados pendientes y fechas pasadas (HU-03).
 @Injectable()
 export class SolicitudesPgService {
   constructor(@Inject(DbService) private readonly db: DbService) {}
@@ -68,9 +69,7 @@ export class SolicitudesPgService {
                    and d.inicio = $3 and d.fin = $4 and d.estado = 'pendiente')
              returning id, recurso_id, solicitante_id, inicio, fin, estado
            )
-           select n.id, n.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                  n.solicitante_id as "solicitanteId", n.inicio, n.fin, n.estado
-             from nueva n join recursos r on r.id = n.recurso_id`,
+           select ${COLUMNAS} from nueva s join recursos r on r.id = s.recurso_id`,
           [recursoId, usuario.id, inicio, fin],
         );
         // Sin filas: la base no insertó porque ya había una pendiente idéntica.
