@@ -129,7 +129,7 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 - El propietario de un recurso y el solicitante de un préstamo salen siempre del token, nunca del body.
 - La web solo usa la clave pública de Supabase.
 - Los permisos también se aplican en la base de datos (RLS), no solo en la API.
-- Pendiente (la API ya está desplegada): en `api/src/db/db.service.ts` la conexión usa `ssl: { rejectUnauthorized: false }`, que es válido para desarrollo pero no verifica el certificado.
+- La conexión a la base verifica el certificado de Supabase: si existe la variable `DB_SSL_CA_BASE64` (el CA de Supabase en base64, configurada en Lambda), `db.service.ts` usa `ssl: { ca, rejectUnauthorized: true }`. Sin esa variable (desarrollo local) cifra la conexión sin verificar el certificado.
 
 ## Tablero Kanban
 
@@ -217,4 +217,4 @@ Dos workflows en `.github/workflows/`:
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
 - [x] Despliegue de la API en AWS Lambda detrás de CloudFront (`/api/*`)
 - [ ] Automatizar el despliegue de la API en el pipeline (hoy es manual)
-- [ ] Verificar el certificado de la base de datos (`ssl` en `db.service.ts`)
+- [x] Verificar el certificado de la base de datos (`ssl` en `db.service.ts`)

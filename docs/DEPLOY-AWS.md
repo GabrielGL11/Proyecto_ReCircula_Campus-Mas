@@ -138,4 +138,4 @@ Cuando la API esté arriba, define la variable `API_URL` = `https://<tu-dominio>
 
 Importante: con la API detrás de la misma distribución **no** debe haber respuestas de error personalizadas 403/404 → `/index.html`, porque taparían los 403/404 reales de la API. Las rutas de la SPA las resuelve la función `recircula-spa` (ver la guía de la API).
 
-Antes de ir a producción: en `api/src/db/db.service.ts` cambia `ssl: { rejectUnauthorized: false }` por verificación real del certificado (ya está anotado en el README).
+Antes de ir a producción: define en Lambda la variable `DB_SSL_CA_BASE64` con el certificado CA de Supabase en base64 para que `api/src/db/db.service.ts` verifique el certificado de la base (ver `DEPLOY-API-AWS.md`).
