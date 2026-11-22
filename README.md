@@ -8,9 +8,9 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01, HU-02 y HU-03 |
-| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01 y HU-02) y solicitudes (HU-03) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
-| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01, HU-02 y HU-03 con sesión iniciada |
+| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01 a HU-04 |
+| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01 y HU-02) y solicitudes (HU-03 y HU-04) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
+| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01 a HU-04 con sesión iniciada |
 | `.github/workflows/` | Integración continua y despliegue de la web en AWS (GitHub Actions) | `ci.yml` y `deploy.yml`; configuración en [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) |
 | `scripts/` | Verificación posterior al despliegue y escaneo de secretos | `smoke-test.sh` y `check-secrets.sh` |
 | `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) (web), [`DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md) (API), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
@@ -39,11 +39,11 @@ Una CloudFront Function quita el prefijo `/api` (igual que el proxy de Vite) y o
 
 ## Roles y qué ve cada uno
 
-| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo |
-|---|---|---|---|
-| Solicitante | No | Sí | Sí |
-| Propietario | Sí | Sí | No |
-| Coordinador | Sí | Sí | No |
+| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo | HU-04 Aprobar o rechazar |
+|---|---|---|---|---|
+| Solicitante | No | Sí | Sí | No |
+| Propietario | Sí | Sí | No | Sí (solo sus recursos) |
+| Coordinador | Sí | Sí | No | Sí (todos) |
 
 Ocultar una pantalla en la web es solo comodidad: la regla de verdad está en la API (responde 403) y en la base de datos (RNF-03).
 
@@ -118,8 +118,11 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | GET | `/auth/yo` | Cualquiera | Devuelve `id`, `nombre` y `rol` de quien tiene la sesión. La web lo usa para mostrar cada pantalla según el rol. |
 | POST | `/recursos` | Propietario o coordinador | HU-01. Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible" a nombre de quien tiene la sesión. Un body inválido responde 400 con la lista de errores. |
 | GET | `/recursos` | Cualquiera | HU-02. Lista el catálogo. Filtros opcionales: `categoria`, `desde` y `hasta` (AAAA-MM-DD). Con fechas excluye recursos con préstamo confirmado en ese rango. No muestra recursos averiados ni retirados. |
-| POST | `/solicitudes` | Solicitante | HU-03. Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`). Con fechas válidas queda "pendiente". El solicitante sale del token. Responde 400 si el fin es anterior al inicio, faltan fechas, son inválidas o el recurso está averiado; 404 si el recurso no existe. |
+| POST | `/solicitudes` | Solicitante | HU-03. Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`). Con fechas válidas queda "pendiente". El solicitante sale del token. Responde 400 si el fin es anterior al inicio, el inicio ya pasó, faltan fechas, son inválidas, el recurso está averiado o ya tienes una solicitud pendiente idéntica; 404 si el recurso no existe. |
 | GET | `/solicitudes` | Solicitante | Lista las solicitudes de la persona con sesión. |
+| GET | `/solicitudes/pendientes` | Propietario o coordinador | HU-04. Lista las solicitudes pendientes por decidir: el propietario ve las de sus recursos; el coordinador, todas. |
+| PATCH | `/solicitudes/:id/aprobar` | Propietario del recurso o coordinador | HU-04. La solicitud queda "confirmada" y el recurso se bloquea en esas fechas. Responde 400 si se superpone con un préstamo confirmado (sigue pendiente) o ya no está pendiente; 403 si no eres el propietario ni el coordinador; 404 si no existe. |
+| PATCH | `/solicitudes/:id/rechazar` | Propietario del recurso o coordinador | HU-04. La solicitud pasa a "rechazada". Mismos 400, 403 y 404 que aprobar. |
 
 ## Seguridad
 
@@ -153,6 +156,7 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-01: Publicar recurso | #14, #16 y #17 (robustez, categorías únicas y pruebas de controlador) | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-02: Consultar disponibilidad | #15 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-03: Solicitar préstamo | #18 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
+| HU-04: Aprobar o rechazar | issue #7 | `npm test` y `npm run test:e2e`; desarrollada con TDD (rojo, verde, refactor) |
 
 Las tres historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
 
@@ -206,8 +210,8 @@ Dos workflows en `.github/workflows/`:
 - [x] HU-03: solicitar préstamo (PR #18 fusionado)
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
-- [x] HU-01, HU-02 y HU-03 conectadas de punta a punta: web, API y base de datos
-- [ ] HU-04 en adelante (aprobar o rechazar, devolución, avería, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
+- [x] HU-01 a HU-04 conectadas de punta a punta: web, API y base de datos
+- [ ] HU-05 en adelante (devolución, avería, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
 - [ ] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
