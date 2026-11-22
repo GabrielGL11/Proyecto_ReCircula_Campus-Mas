@@ -9,11 +9,11 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 | Carpeta | Contenido | Estado |
 |---|---|---|
 | `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01, HU-02 y HU-03 |
-| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01 y HU-02) y solicitudes (HU-03) sobre la base de datos |
+| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01 y HU-02) y solicitudes (HU-03) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
 | `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01, HU-02 y HU-03 con sesión iniciada |
 | `.github/workflows/` | Integración continua y despliegue de la web en AWS (GitHub Actions) | `ci.yml` y `deploy.yml`; configuración en [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) |
 | `scripts/` | Verificación posterior al despliegue y escaneo de secretos | `smoke-test.sh` y `check-secrets.sh` |
-| `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
+| `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) (web), [`DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md) (API), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
 
 ## Arquitectura
 
@@ -23,6 +23,15 @@ web ──/api/... + Authorization: Bearer <token>──► api (NestJS)
 api ──valida el token con Supabase Auth, busca al usuario en la tabla usuarios──►
 api ──SQL (funciones, triggers y restricciones)──► Supabase PostgreSQL
 ```
+
+En producción (AWS), todo se sirve bajo el mismo dominio de CloudFront, sin CORS:
+
+```text
+navegador ──► CloudFront ──/*──────► S3 privado (web estática)
+                         └─/api/*──► Lambda (Function URL, API NestJS) ──► Supabase
+```
+
+Una CloudFront Function quita el prefijo `/api` (igual que el proxy de Vite) y otra devuelve `index.html` para las rutas de la SPA. Los pasos están en [`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md).
 
 - **Base de datos:** las reglas de negocio viven en la base (no se pueden saltar desde la API): fechas válidas, un recurso averiado no se presta, dos préstamos confirmados no se superponen, estados de las solicitudes y permisos por fila (RLS). Detalle en [`db/README.md`](db/README.md).
 - **API:** el usuario sale del token de Supabase, nunca del body de la petición. Traduce los errores de la base a respuestas 400, 403 o 404 con mensajes en español.
@@ -117,7 +126,7 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 - El propietario de un recurso y el solicitante de un préstamo salen siempre del token, nunca del body.
 - La web solo usa la clave pública de Supabase.
 - Los permisos también se aplican en la base de datos (RLS), no solo en la API.
-- Pendiente antes de desplegar: en `api/src/db/db.service.ts` la conexión usa `ssl: { rejectUnauthorized: false }`, que es válido para desarrollo pero no verifica el certificado.
+- Pendiente (la API ya está desplegada): en `api/src/db/db.service.ts` la conexión usa `ssl: { rejectUnauthorized: false }`, que es válido para desarrollo pero no verifica el certificado.
 
 ## Tablero Kanban
 
@@ -177,7 +186,8 @@ Dos workflows en `.github/workflows/`:
 - El acceso a AWS usa OIDC: no hay claves de AWS guardadas en GitHub. El único secreto es el ARN del rol (`AWS_ROLE_ARN`); lo demás son variables públicas.
 - Cada despliegue publica `/version.json` con el commit, y el resumen de la ejecución muestra la versión anterior para poder volver a ella.
 - Pasos de AWS, variables de GitHub y rollback: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md). Guion completo de la práctica: [`docs/PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md).
-- La API (NestJS) se despliega aparte: S3 solo sirve la web.
+- La API (NestJS) se despliega aparte: S3 solo sirve la web. Corre como imagen de contenedor en AWS Lambda y hoy se actualiza a mano desde CloudShell (`docker build` y `push` a ECR, y *Deploy new image* en Lambda); ver [`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md).
+- Con la variable `API_URL` (`https://<dominio>.cloudfront.net/api`), `smoke-test.sh` también comprueba la API: `GET /` responde 200 y `GET /recursos` sin sesión responde 401.
 
 ## Equipo
 
@@ -200,5 +210,7 @@ Dos workflows en `.github/workflows/`:
 - [ ] HU-04 en adelante (aprobar o rechazar, devolución, avería, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
 - [ ] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
-- [ ] Despliegue de la web en AWS (S3 + CloudFront): workflow listo; falta configurar AWS y las variables de GitHub
-- [ ] Despliegue de la API
+- [x] Despliegue de la web en AWS (S3 + CloudFront)
+- [x] Despliegue de la API en AWS Lambda detrás de CloudFront (`/api/*`)
+- [ ] Automatizar el despliegue de la API en el pipeline (hoy es manual)
+- [ ] Verificar el certificado de la base de datos (`ssl` en `db.service.ts`)
