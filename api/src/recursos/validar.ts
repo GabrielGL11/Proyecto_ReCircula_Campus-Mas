@@ -28,8 +28,6 @@ export function validarNombreYCategoria(
   return { errores, nombre: nombreLimpio, categoria: esCategoria(categoria) ? categoria : undefined };
 }
 
-const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
-
 // HU-02: sin fechas no hay filtro; con fechas deben venir las dos, válidas y en orden.
 export function validarFiltroFechas(desde?: string, hasta?: string): { rango: Rango | null; error?: string } {
   if (!desde && !hasta) return { rango: null };
