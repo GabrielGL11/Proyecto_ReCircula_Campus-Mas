@@ -61,7 +61,11 @@ export class SolicitudesPgService {
         const { rows } = await cliente.query<Fila>(
           `with nueva as (
              insert into solicitudes (recurso_id, solicitante_id, inicio, fin)
-             values ($1, $2, $3, $4)
+             select $1::bigint, $2::bigint, $3::date, $4::date
+              where not exists (
+                select 1 from solicitudes d
+                 where d.recurso_id = $1 and d.solicitante_id = $2
+                   and d.inicio = $3 and d.fin = $4 and d.estado = 'pendiente')
              returning id, recurso_id, solicitante_id, inicio, fin, estado
            )
            select n.id, n.recurso_id as "recursoId", r.nombre as "recursoNombre",
@@ -69,6 +73,10 @@ export class SolicitudesPgService {
              from nueva n join recursos r on r.id = n.recurso_id`,
           [recursoId, usuario.id, inicio, fin],
         );
+        // Sin filas: la base no insertó porque ya había una pendiente idéntica.
+        if (rows.length === 0) {
+          throw new BadRequestException(['Ya tienes una solicitud pendiente para este recurso en esas fechas.']);
+        }
         return aSolicitud(rows[0]);
       });
     } catch (error) {
