@@ -8,9 +8,9 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01, HU-02 y HU-03 |
-| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01 y HU-02) y solicitudes (HU-03) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
-| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01, HU-02 y HU-03 con sesión iniciada |
+| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01, HU-02, HU-03 y HU-06 |
+| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01, HU-02 y HU-06) y solicitudes (HU-03) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
+| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01, HU-02, HU-03 y HU-06 con sesión iniciada |
 | `.github/workflows/` | Integración continua y despliegue de la web en AWS (GitHub Actions) | `ci.yml` y `deploy.yml`; configuración en [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) |
 | `scripts/` | Verificación posterior al despliegue y escaneo de secretos | `smoke-test.sh` y `check-secrets.sh` |
 | `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) (web), [`DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md) (API), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
@@ -39,13 +39,13 @@ Una CloudFront Function quita el prefijo `/api` (igual que el proxy de Vite) y o
 
 ## Roles y qué ve cada uno
 
-| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo |
-|---|---|---|---|
-| Solicitante | No | Sí | Sí |
-| Propietario | Sí | Sí | No |
-| Coordinador | Sí | Sí | No |
+| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo | HU-06 Reportar avería |
+|---|---|---|---|---|
+| Solicitante | No | Sí | Sí | Sí |
+| Propietario | Sí | Sí | No | Sí |
+| Coordinador | Sí | Sí | No | Sí |
 
-Ocultar una pantalla en la web es solo comodidad: la regla de verdad está en la API (responde 403) y en la base de datos (RNF-03).
+Ocultar una pantalla en la web es solo comodidad: la regla de verdad está en la API (responde 403) y en la base de datos (RNF-03). HU-06 no se limita por rol: cualquier persona con sesión puede reportar una avería.
 
 ## Requisitos
 
@@ -118,12 +118,13 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | GET | `/auth/yo` | Cualquiera | Devuelve `id`, `nombre` y `rol` de quien tiene la sesión. La web lo usa para mostrar cada pantalla según el rol. |
 | POST | `/recursos` | Propietario o coordinador | HU-01. Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible" a nombre de quien tiene la sesión. Un body inválido responde 400 con la lista de errores. |
 | GET | `/recursos` | Cualquiera | HU-02. Lista el catálogo. Filtros opcionales: `categoria`, `desde` y `hasta` (AAAA-MM-DD). Con fechas excluye recursos con préstamo confirmado en ese rango. No muestra recursos averiados ni retirados. |
+| POST | `/recursos/:id/averias` | Cualquiera | HU-06. Reporta una avería de un recurso (`descripcion` obligatoria). El recurso pasa a "averiado" y deja de aparecer en el catálogo y de poder prestarse. El reporte queda a nombre de quien tiene la sesión (sale del token). Responde 400 si la descripción está vacía, en blanco o no es texto, o si la base rechaza el reporte; 404 si el recurso no existe. |
 | POST | `/solicitudes` | Solicitante | HU-03. Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`). Con fechas válidas queda "pendiente". El solicitante sale del token. Responde 400 si el fin es anterior al inicio, faltan fechas, son inválidas o el recurso está averiado; 404 si el recurso no existe. |
 | GET | `/solicitudes` | Solicitante | Lista las solicitudes de la persona con sesión. |
 
 ## Seguridad
 
-- El propietario de un recurso y el solicitante de un préstamo salen siempre del token, nunca del body.
+- El propietario de un recurso, el solicitante de un préstamo y quien reporta una avería salen siempre del token, nunca del body.
 - La web solo usa la clave pública de Supabase.
 - Los permisos también se aplican en la base de datos (RLS), no solo en la API.
 - Pendiente (la API ya está desplegada): en `api/src/db/db.service.ts` la conexión usa `ssl: { rejectUnauthorized: false }`, que es válido para desarrollo pero no verifica el certificado.
@@ -144,6 +145,26 @@ Historias cargadas: HU-01 a HU-08, HU-10 y HU-11 (HU-09 se descartó como histor
 | 2 | HU-04, HU-05, HU-06, HU-11 |
 | 3 | HU-07, HU-08, HU-10 |
 
+### HU-06: Reportar avería
+
+**Historia:** como solicitante quiero reportar una avería para que el recurso deje de prestarse.
+
+| Campo | Valor |
+|---|---|
+| Prioridad (MoSCoW) | Must |
+| Estimación inicial | 2 puntos (se confirma con Planning Poker) |
+| Dependencia | HU-01 |
+| Incremento | 2 |
+
+Criterios de aceptación:
+
+- (a) El reporte cambia el estado del recurso a "averiado".
+- (b) Un recurso averiado no aparece en la búsqueda ni puede aprobarse.
+
+Evidencia: commits `52f10c2` (pruebas en ROJO) y `14a022d` (implementación en VERDE) de la rama `feature/hu-06-reportar-averia`; Vitest con 51 de 51 pruebas aprobadas y CI en verde; prueba manual en la web (el recurso queda averiado y desaparece del catálogo); en la base de datos, `aprobar_solicitud` rechaza recursos averiados y `db/04_tests.sql` cubre los criterios (a) y (b). Pendiente: enlace al pull request.
+
+La web no tiene pruebas automáticas, así que el TDD (rojo y verde) se aplicó a la API y la web se verificó a mano.
+
 ## Trazabilidad: historia, pull request y prueba
 
 Cada historia se integra mediante pull request revisado por un compañero del equipo.
@@ -153,8 +174,16 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-01: Publicar recurso | #14, #16 y #17 (robustez, categorías únicas y pruebas de controlador) | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-02: Consultar disponibilidad | #15 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-03: Solicitar préstamo | #18 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
+| HU-06: Reportar avería | Rama `feature/hu-06-reportar-averia` (pull request pendiente) | `npm test` (4 pruebas en `recursos.averia.spec.ts`; suite completa 51/51) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
 
-Las tres historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
+Las tres primeras historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
+
+HU-06 se desarrolló con TDD y el historial de la rama lo muestra en este orden:
+
+1. `97af29c`: implementación original (`feat: report resource breakdown`).
+2. `fc4f824`: se retira la implementación (`Revert`).
+3. `52f10c2`: pruebas en ROJO (fallaban con `reportarAveria is not a function`).
+4. `14a022d`: se restaura la implementación (`Reapply`), pruebas en VERDE y CI en verde.
 
 Lista de pull requests: <https://github.com/GabrielGL11/Proyecto_ReCircula_Campus-Mas/pulls?q=is%3Apr+state%3Aclosed>
 
@@ -163,7 +192,7 @@ Lista de pull requests: <https://github.com/GabrielGL11/Proyecto_ReCircula_Campu
 | ID | Requisito | Estado |
 |---|---|---|
 | RNF-01 | Accesibilidad básica: etiquetas visibles, contraste 4,5:1 y manejo por teclado | Formularios con etiquetas y alertas (`role="alert"`). Pendiente pasar Lighthouse (mínimo 90) y recorrer HU-03 solo con teclado |
-| RNF-02 | Errores comprensibles que conservan lo escrito | Pruebas de casos negativos de HU-03 (fechas, recurso averiado, recurso inexistente) y formularios que no borran lo escrito |
+| RNF-02 | Errores comprensibles que conservan lo escrito | Pruebas de casos negativos de HU-03 (fechas, recurso averiado, recurso inexistente) y de HU-06 (descripción vacía o inválida); formularios que no borran lo escrito |
 | RNF-03 | Control de acceso por rol | Roles aplicados en la API y en la base de datos; pruebas de que un rol no autorizado recibe 403 |
 
 ## Estrategia de ramas y flujo de trabajo
@@ -207,7 +236,8 @@ Dos workflows en `.github/workflows/`:
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
 - [x] HU-01, HU-02 y HU-03 conectadas de punta a punta: web, API y base de datos
-- [ ] HU-04 en adelante (aprobar o rechazar, devolución, avería, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
+- [x] HU-06: reportar avería de punta a punta (web, API y base de datos), probada a mano; la API con TDD (rojo `52f10c2`, verde `14a022d`) y CI en verde; pull request pendiente
+- [ ] HU-04 y HU-05 en adelante (aprobar o rechazar, devolución, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
 - [ ] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
