@@ -1,10 +1,10 @@
-import { esFechaIso } from '../recursos/rango.js';
+import { esFechaIso, hoyIso } from '../recursos/rango.js';
 import type { CrearSolicitudDto } from './solicitud.js';
 
 const vacio = (v: unknown) => v === undefined || v === null || v === '';
 
 // HU-03: validaciones puras de lo que llega por HTTP. Devuelve todos los mensajes juntos (RNF-02).
-export function validarSolicitud(datos: CrearSolicitudDto | undefined): string[] {
+export function validarSolicitud(datos: CrearSolicitudDto | undefined, hoy: string = hoyIso()): string[] {
   const { recursoId, inicio, fin } = datos ?? {};
   const errores: string[] = [];
 
@@ -23,6 +23,11 @@ export function validarSolicitud(datos: CrearSolicitudDto | undefined): string[]
   // Regla R2: el fin no puede ser anterior al inicio.
   if (typeof inicio === 'string' && typeof fin === 'string' && esFechaIso(inicio) && esFechaIso(fin) && fin < inicio) {
     errores.push('La fecha de fin no puede ser anterior a la de inicio.');
+  }
+
+  // No se admiten solicitudes que empiecen antes de hoy.
+  if (typeof inicio === 'string' && esFechaIso(inicio) && inicio < hoy) {
+    errores.push('La fecha de inicio no puede estar en el pasado.');
   }
 
   return errores;

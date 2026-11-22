@@ -16,3 +16,11 @@ export function esFechaIso(valor: string): boolean {
   const fecha = new Date(`${valor}T00:00:00Z`);
   return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
 }
+
+// "Hoy" según el campus (Ecuador, UTC-5, sin horario de verano). Con la fecha UTC, entre las 19:00 y las
+// 24:00 en Ecuador ya sería "mañana" y una solicitud para hoy se rechazaría como si fuera del pasado.
+const ZONA_CAMPUS = 'America/Guayaquil';
+
+export function hoyIso(ahora: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_CAMPUS }).format(ahora);
+}
