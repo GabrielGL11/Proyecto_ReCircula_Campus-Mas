@@ -76,3 +76,11 @@ export interface Usuario {
 export function obtenerUsuario(): Promise<Usuario> {
   return conMensajes(apiFetch<Usuario>('/auth/yo'))
 }
+export function reportarAveria(id: number, descripcion: string) {
+  return conMensajes(
+    apiFetch(`/recursos/${id}/averias`, {
+      method: 'POST',
+      body: JSON.stringify({ descripcion }),
+    }),
+  )
+}

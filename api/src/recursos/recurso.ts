@@ -22,3 +22,14 @@ export interface CrearRecursoDto {
   // campo desaparecerá del body. Por ahora lo manda el cliente (no es seguro).
   propietarioId?: unknown;
 }
+export interface ReportarAveriaDto {
+  descripcion?: unknown;
+}
+
+export interface Averia {
+  id: number;
+  recursoId: number;
+  reportadaPor: number;
+  descripcion: string;
+  reportadaEn: Date;
+}

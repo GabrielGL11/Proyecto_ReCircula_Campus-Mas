@@ -8,6 +8,7 @@ import {
   listarSolicitudes,
   obtenerUsuario,
   publicarRecurso,
+  reportarAveria,
   type Filtros,
   type Recurso,
   type Solicitud,
@@ -58,6 +59,13 @@ export default function App() {
   const [confirmacionSolicitud, setConfirmacionSolicitud] = useState<string | null>(null)
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false)
 
+  // Reporte de avería (HU-06)
+  const [recursoAveria, setRecursoAveria] = useState<number | null>(null)
+  const [descripcionAveria, setDescripcionAveria] = useState('')
+  const [erroresAveria, setErroresAveria] = useState<string[]>([])
+  const [confirmacionAveria, setConfirmacionAveria] = useState<string | null>(null)
+  const [enviandoAveria, setEnviandoAveria] = useState(false)
+
   async function cargarSolicitudes() {
     try {
       setSolicitudes(await listarSolicitudes())
@@ -68,6 +76,9 @@ export default function App() {
 
   function abrirSolicitud(id: number) {
     setRecursoElegido(id)
+    setRecursoAveria(null)
+    setDescripcionAveria('')
+    setErroresAveria([])
     setInicioSolicitud(desde)
     setFinSolicitud(hasta)
     setErroresSolicitud([])
@@ -77,6 +88,40 @@ export default function App() {
   function cancelarSolicitud() {
     setRecursoElegido(null)
     setErroresSolicitud([])
+  }
+
+  function abrirAveria(id: number) {
+    setRecursoAveria(id)
+    setRecursoElegido(null)
+    setErroresSolicitud([])
+    setDescripcionAveria('')
+    setErroresAveria([])
+    setConfirmacionAveria(null)
+  }
+
+  function cancelarAveria() {
+    setRecursoAveria(null)
+    setDescripcionAveria('')
+    setErroresAveria([])
+  }
+
+  async function enviarAveria(e: FormEvent) {
+    e.preventDefault()
+    if (recursoAveria === null) return
+    setEnviandoAveria(true)
+    setErroresAveria([])
+    setConfirmacionAveria(null)
+    try {
+      await reportarAveria(recursoAveria, descripcionAveria)
+      setConfirmacionAveria('La avería se reportó correctamente. El recurso ya no aparece disponible.')
+      setRecursoAveria(null)
+      setDescripcionAveria('')
+      await cargar(filtrosActivos ? { categoria: filtroCategoria, desde, hasta } : {})
+    } catch (err) {
+      setErroresAveria(Array.isArray(err) ? (err as string[]) : ['No se pudo reportar la avería.'])
+    } finally {
+      setEnviandoAveria(false)
+    }
   }
 
   async function solicitar(e: FormEvent) {
@@ -317,7 +362,51 @@ export default function App() {
                       Solicitar
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="secundario"
+                    disabled={r.estado !== 'disponible'}
+                    aria-expanded={recursoAveria === r.id}
+                    aria-label={`Reportar avería de ${r.nombre}`}
+                    onClick={() => abrirAveria(r.id)}
+                  >
+                    Reportar avería
+                  </button>
                 </div>
+
+                {recursoAveria === r.id && (
+                  <form onSubmit={enviarAveria} noValidate className="averia">
+                    <div className="campo">
+                      <label htmlFor={`averia-${r.id}`}>Describe el daño</label>
+                      <textarea
+                        id={`averia-${r.id}`}
+                        value={descripcionAveria}
+                        onChange={(e) => setDescripcionAveria(e.target.value)}
+                        aria-invalid={erroresAveria.length > 0 && !descripcionAveria.trim()}
+                        placeholder="Explica qué está fallando"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="acciones">
+                      <button type="submit" disabled={enviandoAveria}>
+                        {enviandoAveria ? 'Enviando…' : 'Enviar avería'}
+                      </button>
+                      <button type="button" className="secundario" onClick={cancelarAveria}>
+                        Cancelar
+                      </button>
+                    </div>
+                    {erroresAveria.length > 0 && (
+                      <div role="alert" className="mensaje error">
+                        <strong>No se pudo reportar la avería:</strong>
+                        <ul>
+                          {erroresAveria.map((m) => (
+                            <li key={m}>{m}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </form>
+                )}
 
                 {recursoElegido === r.id && (
                   <form onSubmit={solicitar} noValidate className="solicitud">
@@ -368,6 +457,9 @@ export default function App() {
 
         <div role="status" aria-live="polite">
           {confirmacionSolicitud && <p className="mensaje ok">{confirmacionSolicitud}</p>}
+        </div>
+        <div role="status" aria-live="polite">
+          {confirmacionAveria && <p className="mensaje ok">{confirmacionAveria}</p>}
         </div>
       </section>
 

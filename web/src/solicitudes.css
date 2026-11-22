@@ -1,6 +1,6 @@
 /* HU-03: solicitud de préstamo. Se apoya en las variables de App.css. */
 .catalogo li { display: block; }
-.catalogo .fila { display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center; }
+.catalogo .fila { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 16px; align-items: center; }
 .catalogo .fila-solicitud { grid-template-columns: 1fr auto auto; }
 .catalogo .fila button { padding: 5px 14px; font-size: 0.85rem; }
 
@@ -11,6 +11,36 @@
 .catalogo .solicitud .campo { margin-bottom: 0; }
 .catalogo .solicitud .mensaje { grid-column: 1 / -1; margin: 0; }
 
+.catalogo .averia {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: end;
+  margin-top: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.catalogo .averia .campo { margin-bottom: 0; }
+.catalogo .averia textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  padding: 9px 11px;
+  border: 1px solid #9aa6b6;
+  border-radius: 3px;
+  background: #fff;
+  color: var(--text-h);
+}
+.catalogo .averia textarea:focus-visible {
+  outline: 2px solid var(--primario);
+  outline-offset: 2px;
+}
+.catalogo .averia .acciones { align-self: end; }
+.catalogo .averia .mensaje { grid-column: 1 / -1; margin: 0; }
+
 .estado.pendiente { background: #fff8e6; color: #7a5200; border-color: #e6cf8f; }
 .estado.confirmada { background: #f1f8f4; color: #1d5a37; border-color: #b7d9c4; }
 .estado.rechazada { background: #fdf3f3; color: #7a1c20; border-color: #e3b5b7; }
@@ -19,6 +49,7 @@
 @media (max-width: 520px) {
   .catalogo .fila, .catalogo .fila-solicitud { grid-template-columns: 1fr auto; }
   .catalogo .fila .categoria { grid-column: 1; }
+  .catalogo .averia { grid-template-columns: 1fr; }
 }
 
 /* La lista de errores de dentro del formulario no debe heredar el estilo de las filas del catálogo. */
