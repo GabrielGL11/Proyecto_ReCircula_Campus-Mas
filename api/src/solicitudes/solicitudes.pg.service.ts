@@ -24,6 +24,23 @@ const aSolicitud = (f: Fila): Solicitud => ({
   estado: f.estado,
 });
 
+// Columnas que devuelve cualquier consulta de solicitudes (alias s = solicitud, r = recurso).
+const COLUMNAS = `s.id, s.recurso_id as "recursoId", r.nombre as "recursoNombre",
+                  s.solicitante_id as "solicitanteId", s.inicio, s.fin, s.estado`;
+
+// HU-04: cada decisión llama a su función de la base y tiene su propio mensaje de 403.
+type Accion = 'aprobar' | 'rechazar';
+const DECISIONES: Record<Accion, { funcion: string; sinPermiso: string }> = {
+  aprobar: {
+    funcion: 'aprobar_solicitud',
+    sinPermiso: 'Solo el propietario o el coordinador pueden aprobar una solicitud.',
+  },
+  rechazar: {
+    funcion: 'rechazar_solicitud',
+    sinPermiso: 'Solo el propietario o el coordinador pueden rechazar una solicitud.',
+  },
+};
+
 // HU-03 sobre Postgres (Supabase). Las reglas viven en la base (trigger trg_solicitud_insert):
 // fin >= inicio (R2), recurso existente, no averiado, no retirado y estado inicial "pendiente".
 @Injectable()
@@ -63,8 +80,7 @@ export class SolicitudesPgService {
   async listar(usuario: Usuario): Promise<Solicitud[]> {
     try {
       const { rows } = await this.db.query<Fila>(
-        `select s.id, s.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                s.solicitante_id as "solicitanteId", s.inicio, s.fin, s.estado
+        `select ${COLUMNAS}
            from solicitudes s join recursos r on r.id = s.recurso_id
           where s.solicitante_id = $1
           order by s.id desc`,
@@ -76,40 +92,25 @@ export class SolicitudesPgService {
     }
   }
 
-  // HU-04: el propietario (o el coordinador) aprueba. R1 y R3 las aplica aprobar_solicitud en la base.
-  async aprobar(id: number, usuario: Usuario): Promise<Solicitud> {
-    if (usuario.rol === 'solicitante') {
-      throw new ForbiddenException(['Solo el propietario o el coordinador pueden aprobar una solicitud.']);
-    }
-    if (!Number.isInteger(id) || id <= 0) throw new BadRequestException(['Indica una solicitud válida.']);
-    try {
-      return await this.db.comoActor(usuario.id, async (cliente) => {
-        const { rows } = await cliente.query<Fila>(
-          `with decidida as (select * from aprobar_solicitud($1))
-           select d.id, d.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                  d.solicitante_id as "solicitanteId", d.inicio, d.fin, d.estado
-             from decidida d join recursos r on r.id = d.recurso_id`,
-          [id],
-        );
-        return aSolicitud(rows[0]);
-      });
-    } catch (error) {
-      throw traducirErrorDb(error);
-    }
+  // HU-04: el propietario (o el coordinador) aprueba o rechaza. R1 y R3 las aplica la base.
+  aprobar(id: number, usuario: Usuario): Promise<Solicitud> {
+    return this.decidir('aprobar', id, usuario);
   }
 
-  async rechazar(id: number, usuario: Usuario): Promise<Solicitud> {
-    if (usuario.rol === 'solicitante') {
-      throw new ForbiddenException(['Solo el propietario o el coordinador pueden rechazar una solicitud.']);
-    }
+  rechazar(id: number, usuario: Usuario): Promise<Solicitud> {
+    return this.decidir('rechazar', id, usuario);
+  }
+
+  private async decidir(accion: Accion, id: number, usuario: Usuario): Promise<Solicitud> {
+    const { funcion, sinPermiso } = DECISIONES[accion];
+    if (usuario.rol === 'solicitante') throw new ForbiddenException([sinPermiso]);
     if (!Number.isInteger(id) || id <= 0) throw new BadRequestException(['Indica una solicitud válida.']);
     try {
       return await this.db.comoActor(usuario.id, async (cliente) => {
+        // `funcion` sale de DECISIONES (lista cerrada), nunca del cliente: es seguro interpolarla.
         const { rows } = await cliente.query<Fila>(
-          `with decidida as (select * from rechazar_solicitud($1))
-           select d.id, d.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                  d.solicitante_id as "solicitanteId", d.inicio, d.fin, d.estado
-             from decidida d join recursos r on r.id = d.recurso_id`,
+          `with decidida as (select * from ${funcion}($1))
+           select ${COLUMNAS} from decidida s join recursos r on r.id = s.recurso_id`,
           [id],
         );
         return aSolicitud(rows[0]);
@@ -126,8 +127,7 @@ export class SolicitudesPgService {
     }
     try {
       const { rows } = await this.db.query<Fila>(
-        `select s.id, s.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                s.solicitante_id as "solicitanteId", s.inicio, s.fin, s.estado
+        `select ${COLUMNAS}
            from solicitudes s join recursos r on r.id = s.recurso_id
           where s.estado = 'pendiente' and ($2 or r.propietario_id = $1)
           order by s.creado_en, s.id`,
