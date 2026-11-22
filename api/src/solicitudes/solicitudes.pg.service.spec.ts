@@ -132,3 +132,176 @@ describe('SolicitudesPgService: solicitar préstamo (HU-03)', () => {
     expect(lista[0].rango).toEqual({ inicio: '2026-11-20', fin: '2026-11-22' });
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// HU-04: aprobar o rechazar una solicitud.  TDD · Ciclo 1: superposición de fechas (regla R1).
+// La base ya aplica R1 y R3 (aprobar_solicitud / rechazar_solicitud); aquí se prueba que la API
+// llame a esas funciones con el usuario del token y que traduzca cada error a un mensaje claro (RNF-02).
+// ---------------------------------------------------------------------------------------------
+function crearDbDecision(estado: 'confirmada' | 'rechazada') {
+  const fila = {
+    id: 10,
+    recursoId: 6,
+    recursoNombre: 'Casio fx-991',
+    solicitanteId: 4,
+    inicio: '2026-11-20',
+    fin: '2026-11-22',
+    estado,
+  };
+  const clienteQuery = vi.fn().mockResolvedValue({ rows: [fila] });
+  const comoActor = vi.fn(async (_id: number, fn: (c: unknown) => Promise<unknown>) => fn({ query: clienteQuery }));
+  const query = vi.fn().mockResolvedValue({ rows: [{ ...fila, estado: 'pendiente' }] });
+  const db = { query, comoActor } as unknown as DbService;
+  return { db, query, clienteQuery, comoActor };
+}
+
+describe('SolicitudesPgService: aprobar solicitud (HU-04)', () => {
+  // Criterio (a): sin superposición, la aprobación confirma el préstamo
+  it('(a) aprueba una solicitud pendiente y queda confirmada', async () => {
+    const { db, comoActor, clienteQuery } = crearDbDecision('confirmada');
+    const s = await new SolicitudesPgService(db).aprobar(10, carlos);
+
+    expect(s).toEqual({
+      id: 10,
+      recursoId: 6,
+      recursoNombre: 'Casio fx-991',
+      solicitanteId: 4,
+      rango: { inicio: '2026-11-20', fin: '2026-11-22' },
+      estado: 'confirmada',
+    });
+    expect(comoActor).toHaveBeenCalledWith(carlos.id, expect.any(Function));
+    expect(clienteQuery.mock.calls[0][0]).toContain('aprobar_solicitud');
+    expect(clienteQuery.mock.calls[0][1]).toEqual([10]);
+  });
+
+  // Criterio (b): CON superposición la aprobación falla (alternativa del BPMN: error, la solicitud sigue pendiente)
+  it('(b) con superposición la aprobación falla con un mensaje comprensible', async () => {
+    const { db, comoActor } = crearDbDecision('confirmada');
+    comoActor.mockRejectedValueOnce({
+      code: '23P01',
+      message: 'La solicitud se superpone con un préstamo confirmado',
+    });
+
+    const error = await new SolicitudesPgService(db).aprobar(10, carlos).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as BadRequestException).getResponse()).toMatchObject({
+      message: ['La solicitud se superpone con un préstamo confirmado'],
+    });
+  });
+
+  // Criterio (c): solo el propietario o el coordinador
+  it('(c) el coordinador también puede aprobar', async () => {
+    const { db, comoActor } = crearDbDecision('confirmada');
+    await new SolicitudesPgService(db).aprobar(10, coordinacion);
+    expect(comoActor).toHaveBeenCalledWith(coordinacion.id, expect.any(Function));
+  });
+
+  it('(c) un solicitante no puede aprobar y no se toca la base', async () => {
+    const { db, comoActor } = crearDbDecision('confirmada');
+    await expect(new SolicitudesPgService(db).aprobar(10, ana)).rejects.toThrow(ForbiddenException);
+    expect(comoActor).not.toHaveBeenCalled();
+  });
+
+  it('(c) un propietario que no es dueño del recurso recibe 403 con el mensaje de la base', async () => {
+    const { db, comoActor } = crearDbDecision('confirmada');
+    comoActor.mockRejectedValueOnce({
+      code: '42501',
+      message: 'Solo el propietario o el coordinador pueden aprobar una solicitud',
+    });
+    const error = await new SolicitudesPgService(db).aprobar(10, carlos).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      message: ['Solo el propietario o el coordinador pueden aprobar una solicitud'],
+    });
+  });
+
+  // RNF-02: casos negativos con mensaje comprensible
+  it('RNF-02: una solicitud que no existe responde 404', async () => {
+    const { db, comoActor } = crearDbDecision('confirmada');
+    comoActor.mockRejectedValueOnce({
+      code: 'P0002',
+      message: 'La solicitud 999 no existe',
+    });
+    await expect(new SolicitudesPgService(db).aprobar(999, carlos)).rejects.toThrow(NotFoundException);
+  });
+
+  it('RNF-02: una solicitud que ya no está pendiente responde 400 con el mensaje de la base', async () => {
+    const { db, comoActor } = crearDbDecision('confirmada');
+    comoActor.mockRejectedValueOnce({
+      code: '23514',
+      message: 'Solo se puede aprobar una solicitud pendiente (estado actual: confirmada)',
+    });
+    const error = await new SolicitudesPgService(db).aprobar(10, carlos).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as BadRequestException).getResponse()).toMatchObject({
+      message: ['Solo se puede aprobar una solicitud pendiente (estado actual: confirmada)'],
+    });
+  });
+
+  it('RNF-02: un id inválido responde 400 y no toca la base', async () => {
+    const { db, comoActor } = crearDbDecision('confirmada');
+    const servicio = new SolicitudesPgService(db);
+    for (const id of [0, -3, 1.5, Number.NaN]) {
+      const error = await servicio.aprobar(id, carlos).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        message: ['Indica una solicitud válida.'],
+      });
+    }
+    expect(comoActor).not.toHaveBeenCalled();
+  });
+});
+
+describe('SolicitudesPgService: rechazar solicitud (HU-04)', () => {
+  it('rechaza una solicitud pendiente y queda rechazada', async () => {
+    const { db, comoActor, clienteQuery } = crearDbDecision('rechazada');
+    const s = await new SolicitudesPgService(db).rechazar(10, carlos);
+    expect(s.estado).toBe('rechazada');
+    expect(comoActor).toHaveBeenCalledWith(carlos.id, expect.any(Function));
+    expect(clienteQuery.mock.calls[0][0]).toContain('rechazar_solicitud');
+    expect(clienteQuery.mock.calls[0][1]).toEqual([10]);
+  });
+
+  it('un solicitante no puede rechazar y no se toca la base', async () => {
+    const { db, comoActor } = crearDbDecision('rechazada');
+    await expect(new SolicitudesPgService(db).rechazar(10, ana)).rejects.toThrow(ForbiddenException);
+    expect(comoActor).not.toHaveBeenCalled();
+  });
+
+  it('RNF-02: un propietario ajeno al recurso recibe 403 con el mensaje de la base', async () => {
+    const { db, comoActor } = crearDbDecision('rechazada');
+    comoActor.mockRejectedValueOnce({
+      code: '42501',
+      message: 'Solo el propietario o el coordinador pueden rechazar una solicitud',
+    });
+    await expect(new SolicitudesPgService(db).rechazar(10, carlos)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('RNF-02: un id inválido responde 400 y no toca la base', async () => {
+    const { db, comoActor } = crearDbDecision('rechazada');
+    await expect(new SolicitudesPgService(db).rechazar(Number.NaN, carlos)).rejects.toThrow(BadRequestException);
+    expect(comoActor).not.toHaveBeenCalled();
+  });
+});
+
+describe('SolicitudesPgService: solicitudes pendientes por decidir (HU-04)', () => {
+  it('el propietario ve solo las pendientes de sus recursos', async () => {
+    const { db, query } = crearDbDecision('confirmada');
+    const lista = await new SolicitudesPgService(db).listarPendientes(carlos);
+    expect(query.mock.calls[0][1]).toEqual([carlos.id, false]);
+    expect(lista[0].estado).toBe('pendiente');
+  });
+
+  it('el coordinador ve las pendientes de todos los recursos', async () => {
+    const { db, query } = crearDbDecision('confirmada');
+    await new SolicitudesPgService(db).listarPendientes(coordinacion);
+    expect(query.mock.calls[0][1]).toEqual([coordinacion.id, true]);
+  });
+
+  it('un solicitante no puede ver las pendientes por decidir', async () => {
+    const { db, query } = crearDbDecision('confirmada');
+    await expect(new SolicitudesPgService(db).listarPendientes(ana)).rejects.toThrow(ForbiddenException);
+    expect(query).not.toHaveBeenCalled();
+  });
+});
