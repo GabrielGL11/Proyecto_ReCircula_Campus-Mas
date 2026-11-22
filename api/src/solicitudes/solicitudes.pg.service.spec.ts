@@ -7,6 +7,15 @@ const ana: Usuario = { id: 4, nombre: 'Ana Loor', rol: 'solicitante' };
 const carlos: Usuario = { id: 2, nombre: 'Carlos Vaca', rol: 'propietario' };
 const coordinacion: Usuario = { id: 5, nombre: 'Coordinación', rol: 'coordinador' };
 
+// El reloj se congela para que las fechas de las pruebas no caduquen (HU-03 no admite fechas pasadas).
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-10T12:00:00-05:00'));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 // Base de datos falsa: comprobamos qué SQL y parámetros manda el servicio y cómo traduce los errores.
 function crearDbFalsa() {
   const fila = {
@@ -331,5 +340,29 @@ describe('SolicitudesPgService: duplicados pendientes (HU-03)', () => {
     expect(sql).toContain('not exists');
     expect(sql).toContain("estado = 'pendiente'");
     expect(sql).toContain('solicitante_id = $2');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// HU-03 (pendiente heredado): no se admiten solicitudes que empiecen antes de hoy.
+// ---------------------------------------------------------------------------------------------
+describe('SolicitudesPgService: fechas en el pasado (HU-03)', () => {
+  it('rechaza una solicitud que empieza antes de hoy y no toca la base', async () => {
+    const { db, comoActor } = crearDbFalsa();
+    const error = await new SolicitudesPgService(db)
+      .crear({ recursoId: 6, inicio: '2026-11-05', fin: '2026-11-08' }, ana)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect((error as BadRequestException).getResponse()).toMatchObject({
+      message: ['La fecha de inicio no puede estar en el pasado.'],
+    });
+    expect(comoActor).not.toHaveBeenCalled();
+  });
+
+  it('acepta una solicitud que empieza hoy', async () => {
+    const { db, comoActor } = crearDbFalsa();
+    await new SolicitudesPgService(db).crear({ recursoId: 6, inicio: '2026-11-10', fin: '2026-11-10' }, ana);
+    expect(comoActor).toHaveBeenCalledOnce();
   });
 });
