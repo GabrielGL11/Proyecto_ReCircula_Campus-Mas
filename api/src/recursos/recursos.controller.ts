@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Inject, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard, type Usuario } from '../auth/auth.guard.js';
 import { UsuarioActual } from '../auth/usuario.decorator.js';
-import type { CrearRecursoDto, ReportarAveriaDto } from './recurso.js';
+import type { CrearRecursoDto } from './recurso.js';
 import { RecursosPgService } from './recursos.pg.service.js';
 
 @Controller('recursos')
@@ -23,14 +23,5 @@ export class RecursosController {
     @Query('hasta') hasta?: string,
   ) {
     return this.recursos.listar({ categoria, desde, hasta });
-  }
-
-  @Post(':id/averias')
-  reportarAveria(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() datos: ReportarAveriaDto,
-    @UsuarioActual() usuario: Usuario,
-  ) {
-    return this.recursos.reportarAveria(id, datos, usuario);
   }
 }
