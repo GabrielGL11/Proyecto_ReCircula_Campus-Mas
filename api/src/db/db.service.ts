@@ -13,9 +13,18 @@ export class DbService implements OnModuleDestroy {
   constructor(@Inject(ConfigService) config: ConfigService) {
     this.pool = new pg.Pool({
       connectionString: config.get<string>('DATABASE_URL'),
-      ssl: { rejectUnauthorized: false }, // Supabase pooler
+      ssl: DbService.opcionesSsl(config),
       max: 5,
     });
+  }
+
+  // Si se define DB_SSL_CA_BASE64 (el certificado CA de Supabase en base64), se verifica el
+  // certificado del servidor. Sin esa variable se mantiene el comportamiento anterior
+  // (cifrado sin verificar el certificado), así que activar la verificación es opcional.
+  private static opcionesSsl(config: ConfigService): pg.PoolConfig['ssl'] {
+    const caBase64 = config.get<string>('DB_SSL_CA_BASE64');
+    if (!caBase64) return { rejectUnauthorized: false };
+    return { ca: Buffer.from(caBase64, 'base64').toString('utf8'), rejectUnauthorized: true };
   }
 
   // Consulta simple (lecturas sin usuario, p. ej. buscar_recursos).
