@@ -134,7 +134,7 @@ Se puede volver a cualquier commit que ya se haya desplegado antes (contiene `sc
 
 La web llama a `/api/...` (en desarrollo, el proxy de Vite lo manda a `localhost:4200`). En producción la API corre en **AWS Lambda** (imagen de contenedor con Function URL) y CloudFront le envía `/api/*` con un segundo origin y un behavior propio. Los pasos completos (imagen en ECR, función, variables de entorno, CloudFront Functions, behavior y verificación) están en [`DEPLOY-API-AWS.md`](DEPLOY-API-AWS.md).
 
-Cuando la API esté arriba, define la variable `API_URL` = `https://<tu-dominio>/api` y la verificación comprobará `GET /` (200) y `GET /recursos` sin sesión (401).
+Cuando la API esté arriba, define la variable `API_URL` = `https://<tu-dominio>/api` y la verificación comprobará que `GET /auth/yo` y `GET /recursos` sin sesión respondan 401 en JSON.
 
 Importante: con la API detrás de la misma distribución **no** debe haber respuestas de error personalizadas 403/404 → `/index.html`, porque taparían los 403/404 reales de la API. Las rutas de la SPA las resuelve la función `recircula-spa` (ver la guía de la API).
 

@@ -5,7 +5,7 @@
 #
 # Variables opcionales:
 #   S3_BUCKET y AWS_REGION  Comprueba el caso de error "el bucket NO es público" (se espera 403).
-#   API_URL                 Comprueba la API: GET / = 200 y GET /recursos sin sesión = 401.
+#   API_URL                 Comprueba la API: GET /auth/yo y GET /recursos sin sesión = 401 en JSON.
 #
 # Sale con código 1 si algo falla, así el job del pipeline queda en rojo.
 set -uo pipefail
@@ -110,11 +110,13 @@ fi
 
 if [ -n "${API_URL:-}" ]; then
   API="${API_URL%/}"
-  code=$(get "$API/" "$TMP/api.txt" "$TMP/api.h")
-  if [ "$code" = "200" ] && grep -q 'ReCircula Campus API' "$TMP/api.txt"; then
-    ok "API: GET / responde 200"
+  # Se comprueba una ruta real con el guard (401 en JSON de Nest), no "GET /": a través de CloudFront
+  # la ruta raíz de la API puede chocar con el objeto raíz por defecto (index.html) de la distribución.
+  code=$(get "$API/auth/yo" "$TMP/api.txt" "$TMP/api.h")
+  if [ "$code" = "401" ] && grep -q '"statusCode":401' "$TMP/api.txt"; then
+    ok "API: GET /auth/yo sin sesión responde 401 en JSON (la API está viva detrás de CloudFront)"
   else
-    fail "API: GET / respondió $code (se esperaba 200 'ReCircula Campus API')"
+    fail "API: GET /auth/yo sin sesión respondió $code (se esperaba 401 en JSON de la API)"
   fi
   code=$(get "$API/recursos" "$TMP/api2.txt" "$TMP/api2.h")
   if [ "$code" = "401" ]; then

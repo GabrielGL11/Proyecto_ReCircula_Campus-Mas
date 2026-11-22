@@ -187,7 +187,7 @@ Dos workflows en `.github/workflows/`:
 - Cada despliegue publica `/version.json` con el commit, y el resumen de la ejecución muestra la versión anterior para poder volver a ella.
 - Pasos de AWS, variables de GitHub y rollback: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md). Guion completo de la práctica: [`docs/PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md).
 - La API (NestJS) se despliega aparte: S3 solo sirve la web. Corre como imagen de contenedor en AWS Lambda y hoy se actualiza a mano desde CloudShell (`docker build` y `push` a ECR, y *Deploy new image* en Lambda); ver [`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md).
-- Con la variable `API_URL` (`https://<dominio>.cloudfront.net/api`), `smoke-test.sh` también comprueba la API: `GET /` responde 200 y `GET /recursos` sin sesión responde 401.
+- Con la variable `API_URL` (`https://<dominio>.cloudfront.net/api`), `smoke-test.sh` también comprueba la API: `GET /auth/yo` y `GET /recursos` sin sesión responden 401 en JSON.
 
 ## Equipo
 
