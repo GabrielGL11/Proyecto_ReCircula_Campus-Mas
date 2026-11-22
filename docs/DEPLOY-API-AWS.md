@@ -1,82 +1,107 @@
-# Desplegar la API en AWS (App Runner) y conectarla a CloudFront
+# Desplegar la API en AWS (Lambda + CloudFront)
 
-La base de datos ya está en la nube (Supabase), así que no hay que "subirla": la API solo necesita
-`DATABASE_URL`, `SUPABASE_URL` y `SUPABASE_KEY`. Lo que falta es que la API esté encendida y que
-CloudFront le pase las peticiones `/api/*`.
+La base de datos y el login viven en Supabase, así que no hay nada que "subir" de la base: la API solo
+necesita `DATABASE_URL`, `SUPABASE_URL` y `SUPABASE_KEY`.
 
-Valores de ejemplo: región `us-east-1`. Cámbialos si usas otra.
+La API (NestJS) se empaqueta como imagen de contenedor y corre en **AWS Lambda** con una **Function URL**
+pública. Dentro de la imagen, el [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)
+traduce las peticiones de Lambda a HTTP normal, así que el código de NestJS no cambia.
+CloudFront manda `/api/*` a Lambda y el resto a S3, todo bajo el mismo dominio (sin CORS).
 
-## 1. Construir y subir la imagen (en AWS CloudShell)
+Se eligió Lambda y no App Runner porque su capa gratuita permanente cubre el uso del proyecto
+(App Runner cobra la memoria aprovisionada aunque no haya tráfico).
+
+Valores de ejemplo: región `us-east-2`. Cámbialos si usas otra.
+
+## 1. Construir y subir la imagen (AWS CloudShell)
 
 ```bash
-REGION=us-east-1
+REGION=us-east-2
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 
+# solo la primera vez
 aws ecr create-repository --repository-name recircula-api --region $REGION
+
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT.dkr.ecr.$REGION.amazonaws.com
 
-git clone https://github.com/GabrielGL11/Proyecto_ReCircula_Campus-Mas.git
-cd Proyecto_ReCircula_Campus-Mas/api        # aquí deben estar el Dockerfile y .dockerignore
+git clone https://github.com/GabrielGL11/Proyecto_ReCircula_Campus-Mas.git   # o git pull si ya existe
+cd Proyecto_ReCircula_Campus-Mas/api
 
 docker build -t recircula-api .
 docker tag recircula-api:latest $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/recircula-api:latest
 docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/recircula-api:latest
 ```
 
-## 2. Crear el servicio en App Runner
+Confirma que el push terminó con una línea `latest: digest: sha256:...`.
 
-Consola → App Runner → Create service:
+## 2. Crear la función en Lambda
 
-- Source: Container registry → Amazon ECR → imagen `recircula-api:latest`. Deployment: Manual.
-- ECR access role: "Create new service role".
-- Port: `4200`.
-- Environment variables:
-  - `DATABASE_URL` = cadena del **Session pooler** de Supabase (Connect → Session pooler)
+Consola → Lambda (región Ohio) → Create function → **Container image**:
+
+- Nombre `recircula-api`, imagen `recircula-api:latest` (Browse images), arquitectura **x86_64**.
+- En "Configuración adicional → Redes" activa **URL de función** con autenticación **NONE**
+  (o créala después en Configuration → Function URL).
+
+Cuando se cree:
+
+- Configuration → General configuration → Edit: memoria **1024 MB**, timeout **30 s**
+  (el primer arranque de NestJS tarda varios segundos).
+- Configuration → Environment variables:
   - `SUPABASE_URL` = `https://<ref>.supabase.co`
   - `SUPABASE_KEY` = clave **publishable**
-  - `PORT` = `4200`
-  - (Mejor: guarda `DATABASE_URL` en Secrets Manager y referénciala como secreto.)
-- Health check: protocolo HTTP, path `/`.
+  - `DATABASE_URL` = cadena del **Session pooler** de Supabase (Connect → Session pooler)
 
-Al terminar te da un dominio `xxxx.us-east-1.awsapprunner.com`. Prueba:
+Prueba la Function URL (`https://xxxx.lambda-url.us-east-2.on.aws`):
 
 ```bash
-curl https://xxxx.us-east-1.awsapprunner.com/            # ReCircula Campus API
-curl -i https://xxxx.us-east-1.awsapprunner.com/recursos  # 401 sin sesión (correcto)
+curl https://xxxx.lambda-url.us-east-2.on.aws/            # ReCircula Campus API
+curl -i https://xxxx.lambda-url.us-east-2.on.aws/recursos  # 401 en JSON (correcto, sin sesión)
 ```
 
-Si `/` no responde, mira los logs de App Runner (casi siempre es `DATABASE_URL` mal copiada).
+La primera petición tarda unos segundos (arranque en frío). Si falla, revisa Monitor → CloudWatch logs.
 
 ## 3. CloudFront
 
-1. **Quita** las "Custom error responses" de 403 y 404 → `/index.html`.
-   Son de toda la distribución y convertirían los 403/404 reales de la API en HTML.
-2. Crea las dos funciones de `docs/cloudfront-functions.js` (CloudFront → Functions) y publícalas:
-   `recircula-spa` y `recircula-api-strip`.
-3. Behavior por defecto (`*`): en Viewer request asocia `recircula-spa`
-   (así las rutas de la SPA siguen devolviendo `index.html`).
-4. Origins → Create origin: dominio de App Runner, protocolo **HTTPS only**.
-5. Behaviors → Create:
-   - Path pattern: `/api/*`
-   - Origin: el de App Runner
-   - Viewer protocol: Redirect HTTP to HTTPS
-   - Allowed methods: **GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE**
-   - Cache policy: `CachingDisabled`
-   - Origin request policy: `AllViewerExceptHostHeader`
-   - Function association (Viewer request): `recircula-api-strip`
-6. Espera a que la distribución quede en "Deployed".
+**3.1 Funciones** (CloudFront → Functions; runtime `cloudfront-js-2.0`; Save y luego **Publish** en cada una).
+El código está en [`cloudfront-functions.js`](cloudfront-functions.js): `recircula-spa` y `recircula-api-strip`.
+
+**3.2 Origin:** en la distribución → Origins → Create origin:
+- Origin domain: el host de la Function URL, sin `https://` ni barra final.
+- Protocol: **HTTPS only**. Origin access control: None.
+
+**3.3 Behavior `/api/*`:** Behaviors → Create behavior:
+- Path pattern `/api/*`, origin de Lambda, Redirect HTTP to HTTPS.
+- Allowed methods: **GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE**.
+- Cache policy `CachingDisabled`; origin request policy `AllViewerExceptHostHeader`.
+- Viewer request: CloudFront Function `recircula-api-strip`.
+
+**3.4 Behavior por defecto (`*`):** Viewer request → CloudFront Function `recircula-spa`.
+
+**3.5 Quitar las páginas de error** 403 y 404 → `/index.html` (pestaña Error pages).
+Son de toda la distribución y convertirían los 403/404 reales de la API en HTML; `recircula-spa` las reemplaza
+para las rutas de la SPA. Hazlo después de 3.4.
+
+Espera a que la distribución salga de "Deploying".
 
 ## 4. Verificar
 
 ```bash
-curl -i https://d5m219p6r60sv.cloudfront.net/api/recursos   # 401 en JSON, no HTML
+curl -i https://<dominio>.cloudfront.net/api/recursos     # 401 en JSON, no HTML
+curl -i https://<dominio>.cloudfront.net/ruta/de/la/app   # 200 con index.html
 ```
 
-Luego recarga la web con sesión iniciada: el catálogo debe cargar. En GitHub agrega la variable
-`API_URL` = `https://d5m219p6r60sv.cloudfront.net/api` para que la prueba de humo también valide la API.
+Luego entra a la web con sesión: el catálogo debe cargar. En GitHub agrega la variable `API_URL` =
+`https://<dominio>.cloudfront.net/api` para que la prueba de humo del despliegue también valide la API.
 
-## Pendiente de seguridad
+## 5. Actualizar la API tras un cambio de código
 
-`api/src/db/db.service.ts` sigue con `ssl: { rejectUnauthorized: false }`. Funciona, pero no verifica el
-certificado. Para cerrarlo: descarga el certificado CA de Supabase (Database → Settings → SSL), inclúyelo en
-la imagen y pásalo como `ssl: { ca }`.
+Repite el paso 1 (`git pull`, `docker build`, `tag`, `push`) y en Lambda → Image → **Deploy new image**
+para que la función use la imagen nueva.
+
+## Costos y pendientes
+
+- Lambda: capa gratuita de 1 M de peticiones y 400 000 GB-s al mes. ECR cobra centavos por guardar imágenes:
+  borra las que queden sin tag.
+- `api/src/db/db.service.ts` sigue con `ssl: { rejectUnauthorized: false }`. Funciona, pero no verifica el
+  certificado. Para cerrarlo: descarga el CA de Supabase (Database → Settings → SSL), inclúyelo en la imagen
+  y pásalo como `ssl: { ca }`.
