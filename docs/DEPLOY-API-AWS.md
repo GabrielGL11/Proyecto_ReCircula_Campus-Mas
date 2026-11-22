@@ -96,8 +96,10 @@ Luego entra a la web con sesión: el catálogo debe cargar. En GitHub agrega la 
 
 ## 5. Actualizar la API tras un cambio de código
 
-Repite el paso 1 (`git pull`, `docker build`, `tag`, `push`) y en Lambda → Image → **Deploy new image**
-para que la función use la imagen nueva.
+Es automático: cada push a `main` ejecuta `deploy.yml`, que construye la imagen, la sube a ECR (etiqueta = SHA
+del commit) y actualiza la función con `aws lambda update-function-code`, antes de publicar la web.
+El rol `github-deploy-recircula` necesita la política `deploy-api-recircula` (ECR push y `lambda:UpdateFunctionCode`).
+Para el primer despliegue o una emergencia, el paso 1 sigue sirviendo a mano.
 
 ## Costos y pendientes
 

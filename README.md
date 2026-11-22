@@ -216,5 +216,5 @@ Dos workflows en `.github/workflows/`:
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
 - [x] Despliegue de la API en AWS Lambda detrás de CloudFront (`/api/*`)
-- [ ] Automatizar el despliegue de la API en el pipeline (hoy es manual)
+- [x] Automatizar el despliegue de la API en el pipeline (`deploy.yml`: imagen en ECR + Lambda)
 - [x] Verificar el certificado de la base de datos (`ssl` en `db.service.ts`)
