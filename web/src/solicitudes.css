@@ -2,6 +2,8 @@
 .catalogo li { display: block; }
 .catalogo .fila { display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center; }
 .catalogo .fila-solicitud { grid-template-columns: 1fr auto auto; }
+.catalogo .fila-decision { grid-template-columns: 1fr auto auto; }
+.botones { display: flex; gap: 8px; }
 .catalogo .fila button { padding: 5px 14px; font-size: 0.85rem; }
 
 .catalogo .solicitud {
@@ -18,6 +20,7 @@
 
 @media (max-width: 520px) {
   .catalogo .fila, .catalogo .fila-solicitud { grid-template-columns: 1fr auto; }
+  .catalogo .fila-decision { grid-template-columns: 1fr; }
   .catalogo .fila .categoria { grid-column: 1; }
 }
 

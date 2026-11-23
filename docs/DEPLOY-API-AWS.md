@@ -50,6 +50,7 @@ Cuando se cree:
   - `SUPABASE_URL` = `https://<ref>.supabase.co`
   - `SUPABASE_KEY` = clave **publishable**
   - `DATABASE_URL` = cadena del **Session pooler** de Supabase (Connect → Session pooler)
+  - `DB_SSL_CA_BASE64` = certificado CA de Supabase en base64 (ver "Costos y pendientes")
 
 Prueba la Function URL (`https://xxxx.lambda-url.us-east-2.on.aws`):
 
@@ -95,13 +96,17 @@ Luego entra a la web con sesión: el catálogo debe cargar. En GitHub agrega la 
 
 ## 5. Actualizar la API tras un cambio de código
 
-Repite el paso 1 (`git pull`, `docker build`, `tag`, `push`) y en Lambda → Image → **Deploy new image**
-para que la función use la imagen nueva.
+Es automático: cada push a `main` ejecuta `deploy.yml`, que construye la imagen, la sube a ECR (etiqueta = SHA
+del commit) y actualiza la función con `aws lambda update-function-code`, antes de publicar la web.
+El rol `github-deploy-recircula` necesita la política `deploy-api-recircula` (ECR push y `lambda:UpdateFunctionCode`).
+Para el primer despliegue o una emergencia, el paso 1 sigue sirviendo a mano.
 
 ## Costos y pendientes
 
 - Lambda: capa gratuita de 1 M de peticiones y 400 000 GB-s al mes. ECR cobra centavos por guardar imágenes:
   borra las que queden sin tag.
-- `api/src/db/db.service.ts` sigue con `ssl: { rejectUnauthorized: false }`. Funciona, pero no verifica el
-  certificado. Para cerrarlo: descarga el CA de Supabase (Database → Settings → SSL), inclúyelo en la imagen
-  y pásalo como `ssl: { ca }`.
+- Certificado de la base de datos: `api/src/db/db.service.ts` verifica el certificado de Supabase cuando existe la
+  variable `DB_SSL_CA_BASE64`. Para configurarla: descarga el CA (Database → Settings → SSL → Download certificate),
+  conviértelo a base64 de una sola línea y guárdalo como variable de entorno de Lambda.
+  Linux/CloudShell: `base64 -w0 prod-ca-2021.crt`. PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("prod-ca-2021.crt"))`.
+  Sin esa variable la API sigue funcionando pero no verifica el certificado.

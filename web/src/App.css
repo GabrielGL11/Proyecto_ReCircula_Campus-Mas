@@ -36,11 +36,11 @@ body { background: #eef1f5; }
 .campo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 label { font-weight: 600; font-size: 0.88rem; color: var(--text-h); text-transform: uppercase; letter-spacing: 0.04em; }
 input, select {
-  font: inherit; font-size: 1rem; padding: 9px 11px; border: 1px solid #9aa6b6;
+  font: inherit; font-size: 1rem; padding: 9px 11px; border: 1px solid #738090;
   border-radius: 3px; background: #fff; color: var(--text-h);
 }
 option { background: #fff; color: var(--text-h); }
-::placeholder { color: #7b8794; opacity: 1; }
+::placeholder { color: #5b6776; opacity: 1; } /* 5,76:1 sobre blanco (antes 3,66:1) */
 input:focus-visible, select:focus-visible, button:focus-visible {
   outline: 2px solid var(--primario); outline-offset: 2px;
 }

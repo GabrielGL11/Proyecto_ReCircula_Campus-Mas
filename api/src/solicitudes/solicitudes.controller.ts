@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard, type Usuario } from '../auth/auth.guard.js';
 import { UsuarioActual } from '../auth/usuario.decorator.js';
 import type { CrearSolicitudDto } from './solicitud.js';
@@ -19,5 +19,23 @@ export class SolicitudesController {
   @Get()
   listar(@UsuarioActual() usuario: Usuario) {
     return this.solicitudes.listar(usuario);
+  }
+
+  // GET /solicitudes/pendientes   → las que el propietario (o el coordinador) debe decidir
+  @Get('pendientes')
+  listarPendientes(@UsuarioActual() usuario: Usuario) {
+    return this.solicitudes.listarPendientes(usuario);
+  }
+
+  // PATCH /solicitudes/:id/aprobar   → queda "confirmada" y el recurso se bloquea en esas fechas
+  @Patch(':id/aprobar')
+  aprobar(@Param('id') id: string, @UsuarioActual() usuario: Usuario) {
+    return this.solicitudes.aprobar(Number(id), usuario);
+  }
+
+  // PATCH /solicitudes/:id/rechazar
+  @Patch(':id/rechazar')
+  rechazar(@Param('id') id: string, @UsuarioActual() usuario: Usuario) {
+    return this.solicitudes.rechazar(Number(id), usuario);
   }
 }

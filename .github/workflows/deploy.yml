@@ -1,7 +1,7 @@
 name: Deploy web a AWS (S3 + CloudFront)
 
-# Cada push a main: primero CI; si pasa, compila la web, la publica en S3,
-# refresca CloudFront y verifica que la versión publicada es la esperada.
+# Cada push a main: primero CI; si pasa, publica la API (imagen en ECR + Lambda), compila la web,
+# la publica en S3, refresca CloudFront y verifica que la versión publicada es la esperada.
 #
 # Volver a una versión estable (rollback): Actions → "Deploy web a AWS" → Run workflow
 # y en "ref" poner el commit, la etiqueta o la rama que estaba bien. Ver docs/DEPLOY-AWS.md.
@@ -33,11 +33,59 @@ jobs:
     with:
       ref: ${{ inputs.ref }}
 
+  deploy-api:
+    name: Publicar la API en Lambda
+    needs: ci
+    # Misma condición que la web: se omite sin AWS configurado o si CI falló.
+    if: ${{ !cancelled() && vars.S3_BUCKET != '' && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write   # necesario para OIDC con AWS
+      contents: read
+    env:
+      ECR_REPO: recircula-api
+      LAMBDA_FUNCTION: recircula-api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Credenciales de AWS (OIDC, sin claves guardadas)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login en ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # La imagen lleva el SHA del commit como etiqueta (sirve para volver a una versión anterior).
+      - name: Construir y subir la imagen
+        working-directory: api
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/$ECR_REPO"
+          SHA="$(git rev-parse HEAD)"
+          docker build -t "$IMAGE:$SHA" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$SHA"
+          docker push "$IMAGE:latest"
+          echo "IMAGE_URI=$IMAGE:$SHA" >> "$GITHUB_ENV"
+
+      # Solo cambia el código: las variables de entorno de Lambda no se tocan.
+      - name: Actualizar la función Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$IMAGE_URI" > /dev/null
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION"
+          echo "API publicada: $IMAGE_URI"
+
   deploy:
     name: Publicar, refrescar y verificar
-    needs: ci
+    needs: [ci, deploy-api]
     # Se omite mientras no exista la variable S3_BUCKET (AWS sin configurar) o si CI falló.
-    if: ${{ !cancelled() && vars.S3_BUCKET != '' && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
+    if: ${{ !cancelled() && vars.S3_BUCKET != '' && (needs.ci.result == 'success' || needs.ci.result == 'skipped') && needs.deploy-api.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: production
