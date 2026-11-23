@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable } from '@ne
 import type { Usuario } from '../auth/auth.guard.js';
 import { traducirErrorDb } from '../db/db-errores.js';
 import { DbService } from '../db/db.service.js';
-import type { CrearRecursoDto, Recurso } from './recurso.js';
+import type { Averia, CrearRecursoDto, Recurso, ReportarAveriaDto } from './recurso.js';
 import type { FiltrosRecursos } from './recursos.service.js';
 import { validarFiltroFechas, validarNombreYCategoria } from './validar.js';
 
@@ -51,7 +51,29 @@ export class RecursosPgService {
       );
       return rows;
     } catch (e) {
-      throw traducirErrorDb(e);
+      throw traducirErrorDb(e); 
+    }
+  }
+
+  async reportarAveria(id: number, datos: ReportarAveriaDto | undefined, usuario: Usuario): Promise<Averia> {
+    const descripcion = typeof datos?.descripcion === 'string' ? datos.descripcion.trim() : '';
+    if (!descripcion) throw new BadRequestException(['Describe la avería.']);
+
+    try {
+      return await this.db.comoActor(usuario.id, async (cliente) => {
+        const { rows } = await cliente.query<Averia>(
+          `select id,
+                  recurso_id as "recursoId",
+                  reportada_por as "reportadaPor",
+                  descripcion,
+                  reportada_en as "reportadaEn"
+             from reportar_averia($1, $2)`,
+          [id, descripcion],
+        );
+        return rows[0];
+      });
+    } catch (error) {
+      throw traducirErrorDb(error);
     }
   }
 }

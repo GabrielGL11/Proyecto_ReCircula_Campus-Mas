@@ -21,3 +21,14 @@ export interface CrearRecursoDto {
   // El servicio lo ignora: el propietario sale del token (RNF-03), nunca del body.
   propietarioId?: unknown;
 }
+export interface ReportarAveriaDto {
+  descripcion?: unknown;
+}
+
+export interface Averia {
+  id: number;
+  recursoId: number;
+  reportadaPor: number;
+  descripcion: string;
+  reportadaEn: Date;
+}
