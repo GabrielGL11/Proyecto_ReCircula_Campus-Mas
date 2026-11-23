@@ -40,7 +40,7 @@ Una CloudFront Function quita el prefijo `/api` (igual que el proxy de Vite) y o
 ## Roles y qué ve cada uno
 
 | Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo | HU-04 Aprobar o rechazar | HU-06 Reportar avería |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | Solicitante | No | Sí | Sí | No | Sí |
 | Propietario | Sí | Sí | No | Sí (solo sus recursos) | Sí |
 | Coordinador | Sí | Sí | No | Sí (todos) | Sí |
@@ -122,7 +122,7 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | POST | `/solicitudes` | Solicitante | HU-03. Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`). Con fechas válidas queda "pendiente". El solicitante sale del token. Responde 400 si el fin es anterior al inicio, el inicio ya pasó, faltan fechas, son inválidas, el recurso está averiado o ya tienes una solicitud pendiente idéntica; 404 si el recurso no existe. |
 | GET | `/solicitudes` | Solicitante | Lista las solicitudes de la persona con sesión. |
 | GET | `/solicitudes/pendientes` | Propietario o coordinador | HU-04. Lista las solicitudes pendientes por decidir: el propietario ve las de sus recursos; el coordinador, todas. |
-| PATCH | `/solicitudes/:id/aprobar` | Propietario del recurso o coordinador | HU-04. La solicitud queda "confirmada" y el recurso se bloquea en esas fechas. Responde 400 si se superpone con un préstamo confirmado (sigue pendiente) o ya no está pendiente; 403 si no eres el propietario ni el coordinador; 404 si no existe. |
+| PATCH | `/solicitudes/:id/aprobar` | Propietario del recurso o coordinador | HU-04. La solicitud queda "confirmada" y el recurso se bloquea en esas fechas. Responde 400 si se superpone con un préstamo confirmado (sigue pendiente), si el recurso está averiado o si ya no está pendiente; 403 si no eres el propietario ni el coordinador; 404 si no existe. |
 | PATCH | `/solicitudes/:id/rechazar` | Propietario del recurso o coordinador | HU-04. La solicitud pasa a "rechazada". Mismos 400, 403 y 404 que aprobar. |
 
 ## Seguridad
@@ -164,7 +164,7 @@ Criterios de aceptación:
 - (a) El reporte cambia el estado del recurso a "averiado".
 - (b) Un recurso averiado no aparece en la búsqueda ni puede aprobarse.
 
-Evidencia: commits `52f10c2` (pruebas en ROJO) y `14a022d` (implementación en VERDE) de la rama `feature/hu-06-reportar-averia`; Vitest con 51 de 51 pruebas aprobadas y CI en verde; prueba manual en la web (el recurso queda averiado y desaparece del catálogo); en la base de datos, `aprobar_solicitud` rechaza recursos averiados y `db/04_tests.sql` cubre los criterios (a) y (b). Pull request: #23.
+Evidencia: commits `52f10c2` (pruebas en ROJO) y `14a022d` (implementación en VERDE) de la rama `feature/hu-06-reportar-averia`; Vitest con 81 pruebas unitarias y 18 e2e de la API aprobadas tras fusionar con `main`, y CI en verde; prueba manual en la web (el recurso queda averiado y desaparece del catálogo; al intentar aprobar una solicitud de un recurso averiado la web muestra «El recurso está averiado y no se puede aprobar», mientras que rechazarla y aprobar una solicitud de un recurso disponible siguen funcionando); en la base de datos, `aprobar_solicitud` rechaza recursos averiados y `db/04_tests.sql` cubre los criterios (a) y (b). Pull request: #23.
 
 La web no tiene pruebas automáticas, así que el TDD (rojo y verde) se aplicó a la API y la web se verificó a mano.
 
@@ -178,9 +178,9 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-02: Consultar disponibilidad | #15 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-03: Solicitar préstamo | #18 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-04: Aprobar o rechazar | #22 (issue #7) | `npm test` y `npm run test:e2e`; desarrollada con TDD (rojo, verde, refactor) |
-| HU-06: Reportar avería | #23 | `npm test` (4 pruebas en `recursos.averia.spec.ts`) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
+| HU-06: Reportar avería | #23 (issue #9) | `npm test` (4 pruebas en `recursos.averia.spec.ts`) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
 
-Las tres historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
+Las tres primeras historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
 
 HU-06 se desarrolló con TDD y el historial de la rama lo muestra en este orden:
 
@@ -195,7 +195,7 @@ Lista de pull requests: <https://github.com/GabrielGL11/Proyecto_ReCircula_Campu
 
 | ID | Requisito | Estado |
 |---|---|---|
-| RNF-01 | Accesibilidad básica: etiquetas visibles, contraste 4,5:1 y manejo por teclado | Formularios con etiquetas y alertas (`role="alert"`). Pendiente pasar Lighthouse (mínimo 90) y recorrer HU-03 solo con teclado |
+| RNF-01 | Accesibilidad básica: etiquetas visibles, contraste 4,5:1 y manejo por teclado | Formularios con etiquetas y alertas (`role="alert"`). Lighthouse (22/11/2026): login 100 y, con sesión de coordinación, 22/22 comprobaciones de accesibilidad superadas. Prueba con teclado: orden lógico, foco visible y «Aprobar» (HU-04) activable con Tab + Enter |
 | RNF-02 | Errores comprensibles que conservan lo escrito | Pruebas de casos negativos de HU-03 (fechas, recurso averiado, recurso inexistente), de HU-06 (descripción vacía o inválida) y formularios que no borran lo escrito |
 | RNF-03 | Control de acceso por rol | Roles aplicados en la API y en la base de datos; pruebas de que un rol no autorizado recibe 403 |
 
@@ -237,12 +237,13 @@ Dos workflows en `.github/workflows/`:
 - [x] HU-01: publicar recurso (PR #14, #16 y #17 fusionados)
 - [x] HU-02: consultar disponibilidad por categoría y fechas (PR #15 fusionado)
 - [x] HU-03: solicitar préstamo (PR #18 fusionado)
+- [x] HU-04: aprobar o rechazar solicitud (PR #22 fusionado)
+- [x] HU-06: reportar avería (PR #23 fusionado)
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
-- [x] HU-01 a HU-04 conectadas de punta a punta: web, API y base de datos
-- [x] HU-06: reportar avería de punta a punta (web, API y base de datos), probada a mano; la API con TDD (rojo `52f10c2`, verde `14a022d`) y CI en verde (PR #23)
+- [x] HU-01 a HU-04 y HU-06 conectadas de punta a punta: web, API y base de datos
 - [ ] HU-05 en adelante (devolución, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
-- [ ] Revisión de accesibilidad con Lighthouse (RNF-01)
+- [x] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
 - [x] Despliegue de la API en AWS Lambda detrás de CloudFront (`/api/*`)
