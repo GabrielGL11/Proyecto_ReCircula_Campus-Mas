@@ -67,7 +67,7 @@ jobs:
         run: |
           IMAGE="${{ steps.ecr.outputs.registry }}/$ECR_REPO"
           SHA="$(git rev-parse HEAD)"
-          docker build -t "$IMAGE:$SHA" -t "$IMAGE:latest" .
+          docker build --provenance=false --sbom=false -t "$IMAGE:$SHA" -t "$IMAGE:latest" .
           docker push "$IMAGE:$SHA"
           docker push "$IMAGE:latest"
           echo "IMAGE_URI=$IMAGE:$SHA" >> "$GITHUB_ENV"
