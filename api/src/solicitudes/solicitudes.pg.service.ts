@@ -24,8 +24,26 @@ const aSolicitud = (f: Fila): Solicitud => ({
   estado: f.estado,
 });
 
-// HU-03 sobre Postgres (Supabase). Las reglas viven en la base (trigger trg_solicitud_insert):
-// fin >= inicio (R2), recurso existente, no averiado, no retirado y estado inicial "pendiente".
+// Columnas que devuelve cualquier consulta de solicitudes (alias s = solicitud, r = recurso).
+const COLUMNAS = `s.id, s.recurso_id as "recursoId", r.nombre as "recursoNombre",
+                  s.solicitante_id as "solicitanteId", s.inicio, s.fin, s.estado`;
+
+// HU-04: cada decisión llama a su función de la base y tiene su propio mensaje de 403.
+type Accion = 'aprobar' | 'rechazar';
+const DECISIONES: Record<Accion, { funcion: string; sinPermiso: string }> = {
+  aprobar: {
+    funcion: 'aprobar_solicitud',
+    sinPermiso: 'Solo el propietario o el coordinador pueden aprobar una solicitud.',
+  },
+  rechazar: {
+    funcion: 'rechazar_solicitud',
+    sinPermiso: 'Solo el propietario o el coordinador pueden rechazar una solicitud.',
+  },
+};
+
+// HU-03 y HU-04 sobre Postgres (Supabase). Las reglas viven en la base (trigger trg_solicitud_insert y
+// funciones aprobar/rechazar): fin >= inicio (R2), recurso existente, no averiado, no retirado, sin superposición (R1).
+// La API añade lo que la base no decide: duplicados pendientes y fechas pasadas (HU-03).
 @Injectable()
 export class SolicitudesPgService {
   constructor(@Inject(DbService) private readonly db: DbService) {}
@@ -44,14 +62,20 @@ export class SolicitudesPgService {
         const { rows } = await cliente.query<Fila>(
           `with nueva as (
              insert into solicitudes (recurso_id, solicitante_id, inicio, fin)
-             values ($1, $2, $3, $4)
+             select $1::bigint, $2::bigint, $3::date, $4::date
+              where not exists (
+                select 1 from solicitudes d
+                 where d.recurso_id = $1 and d.solicitante_id = $2
+                   and d.inicio = $3 and d.fin = $4 and d.estado = 'pendiente')
              returning id, recurso_id, solicitante_id, inicio, fin, estado
            )
-           select n.id, n.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                  n.solicitante_id as "solicitanteId", n.inicio, n.fin, n.estado
-             from nueva n join recursos r on r.id = n.recurso_id`,
+           select ${COLUMNAS} from nueva s join recursos r on r.id = s.recurso_id`,
           [recursoId, usuario.id, inicio, fin],
         );
+        // Sin filas: la base no insertó porque ya había una pendiente idéntica.
+        if (rows.length === 0) {
+          throw new BadRequestException(['Ya tienes una solicitud pendiente para este recurso en esas fechas.']);
+        }
         return aSolicitud(rows[0]);
       });
     } catch (error) {
@@ -63,12 +87,58 @@ export class SolicitudesPgService {
   async listar(usuario: Usuario): Promise<Solicitud[]> {
     try {
       const { rows } = await this.db.query<Fila>(
-        `select s.id, s.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                s.solicitante_id as "solicitanteId", s.inicio, s.fin, s.estado
+        `select ${COLUMNAS}
            from solicitudes s join recursos r on r.id = s.recurso_id
           where s.solicitante_id = $1
           order by s.id desc`,
         [usuario.id],
+      );
+      return rows.map(aSolicitud);
+    } catch (error) {
+      throw traducirErrorDb(error);
+    }
+  }
+
+  // HU-04: el propietario (o el coordinador) aprueba o rechaza. R1 y R3 las aplica la base.
+  aprobar(id: number, usuario: Usuario): Promise<Solicitud> {
+    return this.decidir('aprobar', id, usuario);
+  }
+
+  rechazar(id: number, usuario: Usuario): Promise<Solicitud> {
+    return this.decidir('rechazar', id, usuario);
+  }
+
+  private async decidir(accion: Accion, id: number, usuario: Usuario): Promise<Solicitud> {
+    const { funcion, sinPermiso } = DECISIONES[accion];
+    if (usuario.rol === 'solicitante') throw new ForbiddenException([sinPermiso]);
+    if (!Number.isInteger(id) || id <= 0) throw new BadRequestException(['Indica una solicitud válida.']);
+    try {
+      return await this.db.comoActor(usuario.id, async (cliente) => {
+        // `funcion` sale de DECISIONES (lista cerrada), nunca del cliente: es seguro interpolarla.
+        const { rows } = await cliente.query<Fila>(
+          `with decidida as (select * from ${funcion}($1))
+           select ${COLUMNAS} from decidida s join recursos r on r.id = s.recurso_id`,
+          [id],
+        );
+        return aSolicitud(rows[0]);
+      });
+    } catch (error) {
+      throw traducirErrorDb(error);
+    }
+  }
+
+  // Pendientes por decidir: el propietario ve las de sus recursos; el coordinador, todas.
+  async listarPendientes(usuario: Usuario): Promise<Solicitud[]> {
+    if (usuario.rol === 'solicitante') {
+      throw new ForbiddenException(['Solo el propietario o el coordinador pueden ver las solicitudes por decidir.']);
+    }
+    try {
+      const { rows } = await this.db.query<Fila>(
+        `select ${COLUMNAS}
+           from solicitudes s join recursos r on r.id = s.recurso_id
+          where s.estado = 'pendiente' and ($2 or r.propietario_id = $1)
+          order by s.creado_en, s.id`,
+        [usuario.id, usuario.rol === 'coordinador'],
       );
       return rows.map(aSolicitud);
     } catch (error) {

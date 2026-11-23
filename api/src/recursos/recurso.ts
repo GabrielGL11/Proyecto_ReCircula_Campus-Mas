@@ -18,8 +18,7 @@ export interface Recurso {
 export interface CrearRecursoDto {
   nombre?: unknown;
   categoria?: unknown;
-  // TODO(JWT): cuando exista autenticación, el propietario saldrá del token y este
-  // campo desaparecerá del body. Por ahora lo manda el cliente (no es seguro).
+  // El servicio lo ignora: el propietario sale del token (RNF-03), nunca del body.
   propietarioId?: unknown;
 }
 export interface ReportarAveriaDto {

@@ -3,11 +3,14 @@ import './App.css'
 import './solicitudes.css'
 import {
   CATEGORIAS,
+  aprobarSolicitud,
   crearSolicitud,
+  listarPendientes,
   listarRecursos,
   listarSolicitudes,
   obtenerUsuario,
   publicarRecurso,
+  rechazarSolicitud,
   reportarAveria,
   type Filtros,
   type Recurso,
@@ -28,6 +31,7 @@ export default function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const puedePublicar = usuario?.rol === 'propietario' || usuario?.rol === 'coordinador' // HU-01
   const puedeSolicitar = usuario?.rol === 'solicitante' // HU-03
+  const puedeDecidir = usuario?.rol === 'propietario' || usuario?.rol === 'coordinador' // HU-04
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
@@ -65,6 +69,44 @@ export default function App() {
   const [erroresAveria, setErroresAveria] = useState<string[]>([])
   const [confirmacionAveria, setConfirmacionAveria] = useState<string | null>(null)
   const [enviandoAveria, setEnviandoAveria] = useState(false)
+
+  // Decidir solicitudes (HU-04)
+  const [pendientes, setPendientes] = useState<Solicitud[]>([])
+  const [decidiendo, setDecidiendo] = useState<number | null>(null)
+  const [erroresDecision, setErroresDecision] = useState<string[]>([])
+  const [mensajeDecision, setMensajeDecision] = useState<string | null>(null)
+
+  async function cargarPendientes() {
+    try {
+      setPendientes(await listarPendientes())
+    } catch {
+      setPendientes([])
+    }
+  }
+
+  async function decidir(s: Solicitud, accion: 'aprobar' | 'rechazar') {
+    setDecidiendo(s.id)
+    setErroresDecision([])
+    setMensajeDecision(null)
+    try {
+      if (accion === 'aprobar') {
+        await aprobarSolicitud(s.id)
+        setMensajeDecision(
+          `Aprobada: «${s.recursoNombre}» queda confirmado del ${formatoFecha(s.rango.inicio)} al ${formatoFecha(s.rango.fin)} y el recurso se bloquea en esas fechas.`,
+        )
+      } else {
+        await rechazarSolicitud(s.id)
+        setMensajeDecision(`Rechazada la solicitud de «${s.recursoNombre}».`)
+      }
+      await cargarPendientes()
+      await cargar(filtrosActivos ? { categoria: filtroCategoria, desde, hasta } : {})
+    } catch (err) {
+      // Si falla (por ejemplo, se superpone con un préstamo confirmado), la solicitud sigue pendiente (HU-04 b).
+      setErroresDecision(Array.isArray(err) ? (err as string[]) : ['No se pudo registrar la decisión.'])
+    } finally {
+      setDecidiendo(null)
+    }
+  }
 
   async function cargarSolicitudes() {
     try {
@@ -174,6 +216,10 @@ export default function App() {
   useEffect(() => {
     if (puedeSolicitar) void cargarSolicitudes()
   }, [puedeSolicitar])
+
+  useEffect(() => {
+    if (puedeDecidir) void cargarPendientes()
+  }, [puedeDecidir])
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
@@ -462,6 +508,65 @@ export default function App() {
           {confirmacionAveria && <p className="mensaje ok">{confirmacionAveria}</p>}
         </div>
       </section>
+
+      {puedeDecidir && (
+        <section aria-labelledby="titulo-decidir">
+          <h2 id="titulo-decidir">Solicitudes por decidir</h2>
+          {pendientes.length === 0 ? (
+            <p className="vacio">No hay solicitudes pendientes por decidir.</p>
+          ) : (
+            <ul className="catalogo">
+              {pendientes.map((s) => {
+                const detalle = `${s.recursoNombre} del ${formatoFecha(s.rango.inicio)} al ${formatoFecha(s.rango.fin)}`
+                return (
+                  <li key={s.id}>
+                    <div className="fila fila-decision">
+                      <span className="nombre">{s.recursoNombre}</span>
+                      <span className="categoria">
+                        {formatoFecha(s.rango.inicio)} – {formatoFecha(s.rango.fin)} · Solicitante n.º {s.solicitanteId}
+                      </span>
+                      <span className="botones">
+                        <button
+                          type="button"
+                          disabled={decidiendo !== null}
+                          aria-label={`Aprobar solicitud de ${detalle}`}
+                          onClick={() => void decidir(s, 'aprobar')}
+                        >
+                          Aprobar
+                        </button>
+                        <button
+                          type="button"
+                          className="secundario"
+                          disabled={decidiendo !== null}
+                          aria-label={`Rechazar solicitud de ${detalle}`}
+                          onClick={() => void decidir(s, 'rechazar')}
+                        >
+                          Rechazar
+                        </button>
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          {erroresDecision.length > 0 && (
+            <div role="alert" className="mensaje error">
+              <strong>No se pudo registrar la decisión:</strong>
+              <ul>
+                {erroresDecision.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div role="status" aria-live="polite">
+            {mensajeDecision && <p className="mensaje ok">{mensajeDecision}</p>}
+          </div>
+        </section>
+      )}
 
       {puedeSolicitar && (
         <section aria-labelledby="titulo-solicitudes">

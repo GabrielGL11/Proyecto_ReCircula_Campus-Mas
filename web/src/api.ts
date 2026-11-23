@@ -66,6 +66,19 @@ export function listarSolicitudes(): Promise<Solicitud[]> {
   return conMensajes(apiFetch<Solicitud[]>('/solicitudes'))
 }
 
+// HU-04: solicitudes pendientes que le toca decidir al propietario (o a la coordinación).
+export function listarPendientes(): Promise<Solicitud[]> {
+  return conMensajes(apiFetch<Solicitud[]>('/solicitudes/pendientes'))
+}
+
+export function aprobarSolicitud(id: number): Promise<Solicitud> {
+  return conMensajes(apiFetch<Solicitud>(`/solicitudes/${id}/aprobar`, { method: 'PATCH' }))
+}
+
+export function rechazarSolicitud(id: number): Promise<Solicitud> {
+  return conMensajes(apiFetch<Solicitud>(`/solicitudes/${id}/rechazar`, { method: 'PATCH' }))
+}
+
 export interface Usuario {
   id: number
   nombre: string
