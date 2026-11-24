@@ -387,4 +387,15 @@ describe('SolicitudesPgService: registrar devolución (HU-05)', () => {
     expect(clienteQuery).toHaveBeenCalledWith(expect.stringContaining('registrar_devolucion($1)'), [7]);
     expect(devuelta).toMatchObject({ id: 7, estado: 'devuelta', fechaDevolucionReal: '2026-11-21' });
   });
+
+  // Criterio (b): la fecha real es la del campus (Ecuador/Colombia, UTC-5), no la del servidor en UTC.
+  it('envía a la base la fecha de hoy según el campus, no la fecha UTC', async () => {
+    vi.setSystemTime(new Date('2026-11-24T03:31:55Z')); // 23/11 a las 22:31 en Ecuador/Colombia
+    const { db, clienteQuery, fila } = crearDbFalsa();
+    clienteQuery.mockResolvedValue({ rows: [{ ...fila, estado: 'devuelta', fechaDevolucionReal: '2026-11-23' }] });
+
+    await new SolicitudesPgService(db).registrarDevolucion(7, coordinacion);
+
+    expect(clienteQuery).toHaveBeenCalledWith(expect.stringContaining('registrar_devolucion($1, $2)'), [7, '2026-11-23']);
+  });
 });
