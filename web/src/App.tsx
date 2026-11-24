@@ -5,12 +5,14 @@ import {
   CATEGORIAS,
   aprobarSolicitud,
   crearSolicitud,
+  listarConfirmadas,
   listarPendientes,
   listarRecursos,
   listarSolicitudes,
   obtenerUsuario,
   publicarRecurso,
   rechazarSolicitud,
+  registrarDevolucion,
   reportarAveria,
   type Filtros,
   type Recurso,
@@ -32,6 +34,7 @@ export default function App() {
   const puedePublicar = usuario?.rol === 'propietario' || usuario?.rol === 'coordinador' // HU-01
   const puedeSolicitar = usuario?.rol === 'solicitante' // HU-03
   const puedeDecidir = usuario?.rol === 'propietario' || usuario?.rol === 'coordinador' // HU-04
+  const puedeDevolver = usuario?.rol === 'coordinador'
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
@@ -53,6 +56,7 @@ export default function App() {
   // Número de la última petición enviada. Si llega una respuesta de una petición
   // anterior (porque el usuario pulsó Buscar dos veces seguidas), se ignora.
   const ultimaPeticion = useRef(0)
+  const filtrosAplicados = useRef<Filtros>({})
 
   // Solicitud de préstamo (HU-03)
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
@@ -76,6 +80,49 @@ export default function App() {
   const [erroresDecision, setErroresDecision] = useState<string[]>([])
   const [mensajeDecision, setMensajeDecision] = useState<string | null>(null)
 
+  const [confirmadas, setConfirmadas] = useState<Solicitud[]>([])
+  const [cargandoConfirmadas, setCargandoConfirmadas] = useState(true)
+  const [errorConfirmadas, setErrorConfirmadas] = useState(false)
+  const [devolviendo, setDevolviendo] = useState<number | null>(null)
+  const [erroresDevolucion, setErroresDevolucion] = useState<string[]>([])
+  const [mensajeDevolucion, setMensajeDevolucion] = useState<string | null>(null)
+
+  async function cargarConfirmadas() {
+    try {
+      setConfirmadas(await listarConfirmadas())
+      setErrorConfirmadas(false)
+    } catch {
+      setErrorConfirmadas(true)
+    } finally {
+      setCargandoConfirmadas(false)
+    }
+  }
+
+  async function devolver(s: Solicitud) {
+    setDevolviendo(s.id)
+    setErroresDevolucion([])
+    setMensajeDevolucion(null)
+    try {
+      const devuelta = await registrarDevolucion(s.id)
+      const fecha = devuelta.fechaDevolucionReal
+      setMensajeDevolucion(
+        fecha
+          ? `Devolución de «${s.recursoNombre}» registrada el ${formatoFecha(fecha)}.`
+          : `Devolución de «${s.recursoNombre}» registrada.`,
+      )
+      setConfirmadas((actuales) => actuales.filter((prestamo) => prestamo.id !== s.id))
+      await Promise.all([
+        cargarConfirmadas(),
+        cargarPendientes(),
+        cargar(filtrosAplicados.current),
+      ])
+    } catch (err) {
+      setErroresDevolucion(Array.isArray(err) ? (err as string[]) : ['No se pudo registrar la devolución.'])
+    } finally {
+      setDevolviendo(null)
+    }
+  }
+
   async function cargarPendientes() {
     try {
       setPendientes(await listarPendientes())
@@ -91,6 +138,7 @@ export default function App() {
     try {
       if (accion === 'aprobar') {
         await aprobarSolicitud(s.id)
+        if (puedeDevolver) await cargarConfirmadas()
         setMensajeDecision(
           `Aprobada: «${s.recursoNombre}» queda confirmado del ${formatoFecha(s.rango.inicio)} al ${formatoFecha(s.rango.fin)} y el recurso se bloquea en esas fechas.`,
         )
@@ -192,6 +240,7 @@ export default function App() {
   }
 
   async function cargar(filtros: Filtros = {}) {
+    filtrosAplicados.current = filtros
     const miPeticion = ++ultimaPeticion.current
     const vigente = () => miPeticion === ultimaPeticion.current
     setCargando(true)
@@ -220,6 +269,10 @@ export default function App() {
   useEffect(() => {
     if (puedeDecidir) void cargarPendientes()
   }, [puedeDecidir])
+
+  useEffect(() => {
+    if (puedeDevolver) void cargarConfirmadas()
+  }, [puedeDevolver])
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
@@ -528,7 +581,7 @@ export default function App() {
                       <span className="botones">
                         <button
                           type="button"
-                          disabled={decidiendo !== null}
+                          disabled={decidiendo !== null || devolviendo !== null}
                           aria-label={`Aprobar solicitud de ${detalle}`}
                           onClick={() => void decidir(s, 'aprobar')}
                         >
@@ -537,7 +590,7 @@ export default function App() {
                         <button
                           type="button"
                           className="secundario"
-                          disabled={decidiendo !== null}
+                          disabled={decidiendo !== null || devolviendo !== null}
                           aria-label={`Rechazar solicitud de ${detalle}`}
                           onClick={() => void decidir(s, 'rechazar')}
                         >
@@ -568,6 +621,63 @@ export default function App() {
         </section>
       )}
 
+      {puedeDevolver && (
+        <section aria-labelledby="titulo-devoluciones">
+          <h2 id="titulo-devoluciones">Préstamos confirmados</h2>
+          {cargandoConfirmadas && <p role="status">Cargando préstamos…</p>}
+          {errorConfirmadas && (
+            <div role="alert" className="mensaje error">
+              <p>No se pudieron cargar los préstamos confirmados.</p>
+              <button
+                type="button"
+                disabled={cargandoConfirmadas}
+                onClick={() => {
+                  setCargandoConfirmadas(true)
+                  void cargarConfirmadas()
+                }}
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+          {!cargandoConfirmadas && !errorConfirmadas && confirmadas.length === 0 && (
+            <p className="vacio">No hay préstamos pendientes de devolución.</p>
+          )}
+          {confirmadas.length > 0 && (
+            <ul className="catalogo">
+              {confirmadas.map((s) => (
+                <li key={s.id}>
+                  <div className="fila fila-decision">
+                    <span className="nombre">{s.recursoNombre}</span>
+                    <span className="categoria">
+                      {formatoFecha(s.rango.inicio)} – {formatoFecha(s.rango.fin)} · Solicitante n.º {s.solicitanteId}
+                    </span>
+                    <span className="botones">
+                      <button
+                        type="button"
+                        disabled={devolviendo !== null || decidiendo !== null || cargandoConfirmadas || errorConfirmadas}
+                        aria-label={`Registrar devolución de ${s.recursoNombre}, préstamo n.º ${s.id}`}
+                        onClick={() => void devolver(s)}
+                      >
+                        {devolviendo === s.id ? 'Registrando…' : 'Registrar devolución'}
+                      </button>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {erroresDevolucion.length > 0 && (
+            <ul role="alert" className="mensaje error">
+              {erroresDevolucion.map((m) => <li key={m}>{m}</li>)}
+            </ul>
+          )}
+          <div role="status">
+            {mensajeDevolucion && <p className="mensaje ok">{mensajeDevolucion}</p>}
+          </div>
+        </section>
+      )}
+
       {puedeSolicitar && (
         <section aria-labelledby="titulo-solicitudes">
           <h2 id="titulo-solicitudes">Mis solicitudes</h2>
@@ -582,6 +692,9 @@ export default function App() {
                     <span className="categoria">
                       {formatoFecha(s.rango.inicio)} – {formatoFecha(s.rango.fin)}
                     </span>
+                    {s.fechaDevolucionReal && (
+                      <span className="categoria">Devuelto el {formatoFecha(s.fechaDevolucionReal)}</span>
+                    )}
                     <span className={`estado ${s.estado}`}>{s.estado.replaceAll('_', ' ')}</span>
                   </div>
                 </li>

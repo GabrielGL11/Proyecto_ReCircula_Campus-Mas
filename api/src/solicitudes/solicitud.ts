@@ -11,6 +11,7 @@ export interface Solicitud {
   solicitanteId: number;
   rango: Rango;
   estado: EstadoSolicitud;
+  fechaDevolucionReal?: string;
 }
 
 // El solicitante NO viaja en el body: sale del token (RNF-03).
