@@ -4,6 +4,7 @@ import { traducirErrorDb } from '../db/db-errores.js';
 import { DbService } from '../db/db.service.js';
 import type { CrearSolicitudDto, EstadoSolicitud, Solicitud } from './solicitud.js';
 import { validarSolicitud } from './validar.js';
+import { hoyIso } from '../recursos/rango.js';
 
 interface Fila {
   id: number;
@@ -117,7 +118,7 @@ export class SolicitudesPgService {
 
   registrarDevolucion(id: number, usuario: Usuario): Promise<Solicitud> {
     if (usuario.rol !== 'coordinador') throw new ForbiddenException([DECISIONES.devolver.sinPermiso]);
-    return this.decidir('devolver', id, usuario);
+      return this.decidir('devolver', id, usuario, hoyIso());
   }
 
   async listarConfirmadas(usuario: Usuario): Promise<Solicitud[]> {
@@ -137,17 +138,18 @@ export class SolicitudesPgService {
     }
   }
 
-  private async decidir(accion: Accion, id: number, usuario: Usuario): Promise<Solicitud> {
-    const { funcion, sinPermiso } = DECISIONES[accion];
+  private async decidir(accion: Accion, id: number, usuario: Usuario, fecha?: string): Promise<Solicitud> {    const { funcion, sinPermiso } = DECISIONES[accion];
     if (usuario.rol === 'solicitante') throw new ForbiddenException([sinPermiso]);
     if (!Number.isInteger(id) || id <= 0) throw new BadRequestException(['Indica una solicitud válida.']);
     try {
       return await this.db.comoActor(usuario.id, async (cliente) => {
         // `funcion` sale de DECISIONES (lista cerrada), nunca del cliente: es seguro interpolarla.
+                const argumentos = fecha === undefined ? '$1' : '$1, $2';
+        const parametros = fecha === undefined ? [id] : [id, fecha];
         const { rows } = await cliente.query<Fila>(
-          `with decidida as (select * from ${funcion}($1))
-           select ${COLUMNAS} from decidida s join recursos r on r.id = s.recurso_id`,
-          [id],
+          `with decidida as (select * from ${funcion}(${argumentos}))
+            select ${COLUMNAS} from decidida s join recursos r on r.id = s.recurso_id`,
+          parametros,
         );
         return aSolicitud(rows[0]);
       });

@@ -384,7 +384,7 @@ describe('SolicitudesPgService: registrar devolución (HU-05)', () => {
     const devuelta = await new SolicitudesPgService(db).registrarDevolucion(7, coordinacion);
 
     expect(comoActor).toHaveBeenCalledWith(coordinacion.id, expect.any(Function));
-    expect(clienteQuery).toHaveBeenCalledWith(expect.stringContaining('registrar_devolucion($1)'), [7]);
+    expect(clienteQuery).toHaveBeenCalledWith(expect.stringContaining('registrar_devolucion($1, $2)'), [7, '2026-11-10']);
     expect(devuelta).toMatchObject({ id: 7, estado: 'devuelta', fechaDevolucionReal: '2026-11-21' });
   });
 
