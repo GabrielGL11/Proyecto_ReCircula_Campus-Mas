@@ -4,6 +4,7 @@ import { traducirErrorDb } from '../db/db-errores.js';
 import { DbService } from '../db/db.service.js';
 import type { CrearSolicitudDto, EstadoSolicitud, Solicitud } from './solicitud.js';
 import { validarSolicitud } from './validar.js';
+import { hoyIso } from '../recursos/rango.js';
 
 interface Fila {
   id: number;
@@ -13,6 +14,7 @@ interface Fila {
   inicio: string;
   fin: string;
   estado: EstadoSolicitud;
+  fechaDevolucionReal: string | null;
 }
 
 const aSolicitud = (f: Fila): Solicitud => ({
@@ -22,18 +24,24 @@ const aSolicitud = (f: Fila): Solicitud => ({
   solicitanteId: f.solicitanteId,
   rango: { inicio: f.inicio, fin: f.fin },
   estado: f.estado,
+  ...(f.fechaDevolucionReal ? { fechaDevolucionReal: f.fechaDevolucionReal } : {}),
 });
 
 // Columnas que devuelve cualquier consulta de solicitudes (alias s = solicitud, r = recurso).
 const COLUMNAS = `s.id, s.recurso_id as "recursoId", r.nombre as "recursoNombre",
-                  s.solicitante_id as "solicitanteId", s.inicio, s.fin, s.estado`;
+                  s.solicitante_id as "solicitanteId", s.inicio, s.fin, s.estado,
+                  s.fecha_devolucion_real as "fechaDevolucionReal"`;
 
 // HU-04: cada decisión llama a su función de la base y tiene su propio mensaje de 403.
-type Accion = 'aprobar' | 'rechazar';
+type Accion = 'aprobar' | 'rechazar' | 'devolver';
 const DECISIONES: Record<Accion, { funcion: string; sinPermiso: string }> = {
   aprobar: {
     funcion: 'aprobar_solicitud',
     sinPermiso: 'Solo el propietario o el coordinador pueden aprobar una solicitud.',
+  },
+  devolver: {
+    funcion: 'registrar_devolucion',
+    sinPermiso: 'Solo el coordinador puede registrar la devolución.',
   },
   rechazar: {
     funcion: 'rechazar_solicitud',
@@ -67,7 +75,7 @@ export class SolicitudesPgService {
                 select 1 from solicitudes d
                  where d.recurso_id = $1 and d.solicitante_id = $2
                    and d.inicio = $3 and d.fin = $4 and d.estado = 'pendiente')
-             returning id, recurso_id, solicitante_id, inicio, fin, estado
+             returning id, recurso_id, solicitante_id, inicio, fin, estado, fecha_devolucion_real
            )
            select ${COLUMNAS} from nueva s join recursos r on r.id = s.recurso_id`,
           [recursoId, usuario.id, inicio, fin],
@@ -108,17 +116,40 @@ export class SolicitudesPgService {
     return this.decidir('rechazar', id, usuario);
   }
 
-  private async decidir(accion: Accion, id: number, usuario: Usuario): Promise<Solicitud> {
-    const { funcion, sinPermiso } = DECISIONES[accion];
+  registrarDevolucion(id: number, usuario: Usuario): Promise<Solicitud> {
+    if (usuario.rol !== 'coordinador') throw new ForbiddenException([DECISIONES.devolver.sinPermiso]);
+      return this.decidir('devolver', id, usuario, hoyIso());
+  }
+
+  async listarConfirmadas(usuario: Usuario): Promise<Solicitud[]> {
+    if (usuario.rol !== 'coordinador') {
+      throw new ForbiddenException(['Solo el coordinador puede consultar los préstamos confirmados.']);
+    }
+    try {
+      const { rows } = await this.db.query<Fila>(
+        `select ${COLUMNAS}
+           from solicitudes s join recursos r on r.id = s.recurso_id
+          where s.estado = 'confirmada'
+          order by s.fin, s.id`,
+      );
+      return rows.map(aSolicitud);
+    } catch (error) {
+      throw traducirErrorDb(error);
+    }
+  }
+
+  private async decidir(accion: Accion, id: number, usuario: Usuario, fecha?: string): Promise<Solicitud> {    const { funcion, sinPermiso } = DECISIONES[accion];
     if (usuario.rol === 'solicitante') throw new ForbiddenException([sinPermiso]);
     if (!Number.isInteger(id) || id <= 0) throw new BadRequestException(['Indica una solicitud válida.']);
     try {
       return await this.db.comoActor(usuario.id, async (cliente) => {
         // `funcion` sale de DECISIONES (lista cerrada), nunca del cliente: es seguro interpolarla.
+                const argumentos = fecha === undefined ? '$1' : '$1, $2';
+        const parametros = fecha === undefined ? [id] : [id, fecha];
         const { rows } = await cliente.query<Fila>(
-          `with decidida as (select * from ${funcion}($1))
-           select ${COLUMNAS} from decidida s join recursos r on r.id = s.recurso_id`,
-          [id],
+          `with decidida as (select * from ${funcion}(${argumentos}))
+            select ${COLUMNAS} from decidida s join recursos r on r.id = s.recurso_id`,
+          parametros,
         );
         return aSolicitud(rows[0]);
       });

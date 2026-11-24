@@ -31,7 +31,7 @@ function crearDbFalsa() {
   const clienteQuery = vi.fn().mockResolvedValue({ rows: [fila] });
   const comoActor = vi.fn(async (_id: number, fn: (c: unknown) => Promise<unknown>) => fn({ query: clienteQuery }));
   const db = { query, comoActor } as unknown as DbService;
-  return { db, query, clienteQuery, comoActor };
+  return { db, query, clienteQuery, comoActor, fila };
 }
 
 describe('SolicitudesPgService: solicitar préstamo (HU-03)', () => {
@@ -364,5 +364,38 @@ describe('SolicitudesPgService: fechas en el pasado (HU-03)', () => {
     const { db, comoActor } = crearDbFalsa();
     await new SolicitudesPgService(db).crear({ recursoId: 6, inicio: '2026-11-10', fin: '2026-11-10' }, ana);
     expect(comoActor).toHaveBeenCalledOnce();
+  });
+});
+
+describe('SolicitudesPgService: registrar devolución (HU-05)', () => {
+  it('solo permite registrar la devolución al coordinador', () => {
+    const { db, comoActor } = crearDbFalsa();
+    const servicio = new SolicitudesPgService(db);
+    for (const usuario of [ana, carlos]) {
+      expect(() => servicio.registrarDevolucion(7, usuario)).toThrow(ForbiddenException);
+    }
+    expect(comoActor).not.toHaveBeenCalled();
+  });
+
+  it('registra con el actor autenticado y devuelve la fecha real de la base', async () => {
+    const { db, comoActor, clienteQuery, fila } = crearDbFalsa();
+    clienteQuery.mockResolvedValue({ rows: [{ ...fila, estado: 'devuelta', fechaDevolucionReal: '2026-11-21' }] });
+
+    const devuelta = await new SolicitudesPgService(db).registrarDevolucion(7, coordinacion);
+
+    expect(comoActor).toHaveBeenCalledWith(coordinacion.id, expect.any(Function));
+    expect(clienteQuery).toHaveBeenCalledWith(expect.stringContaining('registrar_devolucion($1, $2)'), [7, '2026-11-10']);
+    expect(devuelta).toMatchObject({ id: 7, estado: 'devuelta', fechaDevolucionReal: '2026-11-21' });
+  });
+
+  // Criterio (b): la fecha real es la del campus (Ecuador/Colombia, UTC-5), no la del servidor en UTC.
+  it('envía a la base la fecha de hoy según el campus, no la fecha UTC', async () => {
+    vi.setSystemTime(new Date('2026-11-24T03:31:55Z')); // 23/11 a las 22:31 en Ecuador/Colombia
+    const { db, clienteQuery, fila } = crearDbFalsa();
+    clienteQuery.mockResolvedValue({ rows: [{ ...fila, estado: 'devuelta', fechaDevolucionReal: '2026-11-23' }] });
+
+    await new SolicitudesPgService(db).registrarDevolucion(7, coordinacion);
+
+    expect(clienteQuery).toHaveBeenCalledWith(expect.stringContaining('registrar_devolucion($1, $2)'), [7, '2026-11-23']);
   });
 });

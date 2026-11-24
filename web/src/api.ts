@@ -54,6 +54,7 @@ export interface Solicitud {
   solicitanteId: number
   rango: { inicio: string; fin: string }
   estado: 'pendiente' | 'confirmada' | 'rechazada' | 'devuelta' | 'en_espera_mantenimiento'
+  fechaDevolucionReal?: string
 }
 
 // El solicitante sale del token en la API: ya no se manda solicitanteId.
@@ -77,6 +78,14 @@ export function aprobarSolicitud(id: number): Promise<Solicitud> {
 
 export function rechazarSolicitud(id: number): Promise<Solicitud> {
   return conMensajes(apiFetch<Solicitud>(`/solicitudes/${id}/rechazar`, { method: 'PATCH' }))
+}
+
+export function listarConfirmadas(): Promise<Solicitud[]> {
+  return conMensajes(apiFetch<Solicitud[]>('/solicitudes/confirmadas'))
+}
+
+export function registrarDevolucion(id: number): Promise<Solicitud> {
+  return conMensajes(apiFetch<Solicitud>(`/solicitudes/${id}/devolucion`, { method: 'PATCH' }))
 }
 
 export interface Usuario {

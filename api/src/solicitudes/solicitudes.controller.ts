@@ -33,6 +33,16 @@ export class SolicitudesController {
     return this.solicitudes.aprobar(Number(id), usuario);
   }
 
+  @Get('confirmadas')
+  listarConfirmadas(@UsuarioActual() usuario: Usuario) {
+    return this.solicitudes.listarConfirmadas(usuario);
+  }
+
+  @Patch(':id/devolucion')
+  registrarDevolucion(@Param('id') id: string, @UsuarioActual() usuario: Usuario) {
+    return this.solicitudes.registrarDevolucion(Number(id), usuario);
+  }
+
   // PATCH /solicitudes/:id/rechazar
   @Patch(':id/rechazar')
   rechazar(@Param('id') id: string, @UsuarioActual() usuario: Usuario) {
