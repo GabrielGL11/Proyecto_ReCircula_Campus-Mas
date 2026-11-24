@@ -8,9 +8,9 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01 a HU-04 y HU-06 |
-| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01, HU-02 y HU-06) y solicitudes (HU-03 y HU-04) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
-| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01 a HU-04 y HU-06 con sesión iniciada |
+| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01 a HU-06 |
+| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01, HU-02 y HU-06) y solicitudes (HU-03, HU-04 y HU-05) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
+| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01 a HU-06 con sesión iniciada |
 | `.github/workflows/` | Integración continua y despliegue de la web en AWS (GitHub Actions) | `ci.yml` y `deploy.yml`; configuración en [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) |
 | `scripts/` | Verificación posterior al despliegue y escaneo de secretos | `smoke-test.sh` y `check-secrets.sh` |
 | `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) (web), [`DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md) (API), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
@@ -39,11 +39,11 @@ Una CloudFront Function quita el prefijo `/api` (igual que el proxy de Vite) y o
 
 ## Roles y qué ve cada uno
 
-| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo | HU-04 Aprobar o rechazar | HU-06 Reportar avería |
-|---|---|---|---|---|---|
-| Solicitante | No | Sí | Sí | No | Sí |
-| Propietario | Sí | Sí | No | Sí (solo sus recursos) | Sí |
-| Coordinador | Sí | Sí | No | Sí (todos) | Sí |
+| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo | HU-04 Aprobar o rechazar | HU-05 Registrar devolución | HU-06 Reportar avería |
+|---|---|---|---|---|---|---|
+| Solicitante | No | Sí | Sí | No | No | Sí |
+| Propietario | Sí | Sí | No | Sí (solo sus recursos) | No | Sí |
+| Coordinador | Sí | Sí | No | Sí (todos) | Sí | Sí |
 
 Ocultar una pantalla en la web es solo comodidad: la regla de verdad está en la API (responde 403) y en la base de datos (RNF-03). HU-06 no se limita por rol: cualquier persona con sesión puede reportar una avería.
 
@@ -124,6 +124,7 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | GET | `/solicitudes/pendientes` | Propietario o coordinador | HU-04. Lista las solicitudes pendientes por decidir: el propietario ve las de sus recursos; el coordinador, todas. |
 | PATCH | `/solicitudes/:id/aprobar` | Propietario del recurso o coordinador | HU-04. La solicitud queda "confirmada" y el recurso se bloquea en esas fechas. Responde 400 si se superpone con un préstamo confirmado (sigue pendiente), si el recurso está averiado o si ya no está pendiente; 403 si no eres el propietario ni el coordinador; 404 si no existe. |
 | PATCH | `/solicitudes/:id/rechazar` | Propietario del recurso o coordinador | HU-04. La solicitud pasa a "rechazada". Mismos 400, 403 y 404 que aprobar. |
+| PATCH | `/solicitudes/:id/devolver` | Coordinador | HU-05. Registra la devolución de un préstamo confirmado: se guarda la fecha real de devolución y el recurso vuelve a quedar "disponible" y a aparecer en el catálogo. Responde 400 si la solicitud no está confirmada o ya se devolvió; 403 si no eres coordinador; 404 si no existe. <!-- VERIFICAR: ruta, método y mensajes de error reales de HU-05 en api/ --> |
 
 ## Seguridad
 
@@ -147,6 +148,24 @@ Historias cargadas: HU-01 a HU-08, HU-10 y HU-11 (HU-09 se descartó como histor
 | 1 | HU-01, HU-02, HU-03 |
 | 2 | HU-04, HU-05, HU-06, HU-11 |
 | 3 | HU-07, HU-08, HU-10 |
+
+### HU-05: Registrar devolución
+
+**Historia:** como coordinador quiero registrar la devolución para que el recurso vuelva a estar disponible.
+
+| Campo | Valor |
+|---|---|
+| Prioridad (MoSCoW) | Must |
+| Estimación inicial | 3 puntos (se confirma con Planning Poker) |
+| Dependencia | HU-04 |
+| Incremento | 2 |
+
+Criterios de aceptación:
+
+- (a) Tras registrarla, el recurso aparece disponible en la búsqueda.
+- (b) Se guarda la fecha real de devolución.
+
+Evidencia: pull request #24 fusionado (issue #8), con la tarjeta en la columna Hecho del tablero. <!-- AGREGAR: commits del TDD (rojo/verde), número de pruebas Vitest y e2e, y la prueba manual en la web -->
 
 ### HU-06: Reportar avería
 
@@ -178,6 +197,7 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-02: Consultar disponibilidad | #15 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-03: Solicitar préstamo | #18 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-04: Aprobar o rechazar | #22 (issue #7) | `npm test` y `npm run test:e2e`; desarrollada con TDD (rojo, verde, refactor) |
+| HU-05: Registrar devolución | #24 (issue #8) | `npm test` y `npm run test:e2e` <!-- AJUSTAR: nombre de los archivos de prueba de HU-05 --> |
 | HU-06: Reportar avería | #23 (issue #9) | `npm test` (4 pruebas en `recursos.averia.spec.ts`) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
 
 Las tres primeras historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
@@ -238,11 +258,12 @@ Dos workflows en `.github/workflows/`:
 - [x] HU-02: consultar disponibilidad por categoría y fechas (PR #15 fusionado)
 - [x] HU-03: solicitar préstamo (PR #18 fusionado)
 - [x] HU-04: aprobar o rechazar solicitud (PR #22 fusionado)
+- [x] HU-05: registrar devolución (PR #24 fusionado)
 - [x] HU-06: reportar avería (PR #23 fusionado)
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
-- [x] HU-01 a HU-04 y HU-06 conectadas de punta a punta: web, API y base de datos
-- [ ] HU-05 en adelante (devolución, lista de espera, reparación, panel). La base de datos ya tiene las funciones; faltan la API y la web
+- [x] HU-01 a HU-06 conectadas de punta a punta: web, API y base de datos
+- [ ] HU-07 en adelante (lista de espera, orden de reparación, panel de impacto, retiro por mantenimiento). La base de datos ya tiene las funciones; faltan la API y la web (HU-07 y HU-08 están en desarrollo)
 - [x] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
