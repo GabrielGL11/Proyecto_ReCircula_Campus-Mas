@@ -79,6 +79,7 @@ Cada carpeta trae un `.env.example` con la plantilla. Se copia a `.env` y se rel
 
 `web/.env`:
 
+
 | Variable | Qué es |
 |---|---|
 | `VITE_SUPABASE_URL` | La misma URL del proyecto |
@@ -124,7 +125,10 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | GET | `/solicitudes/pendientes` | Propietario o coordinador | HU-04. Lista las solicitudes pendientes por decidir: el propietario ve las de sus recursos; el coordinador, todas. |
 | PATCH | `/solicitudes/:id/aprobar` | Propietario del recurso o coordinador | HU-04. La solicitud queda "confirmada" y el recurso se bloquea en esas fechas. Responde 400 si se superpone con un préstamo confirmado (sigue pendiente), si el recurso está averiado o si ya no está pendiente; 403 si no eres el propietario ni el coordinador; 404 si no existe. |
 | PATCH | `/solicitudes/:id/rechazar` | Propietario del recurso o coordinador | HU-04. La solicitud pasa a "rechazada". Mismos 400, 403 y 404 que aprobar. |
-| PATCH | `/solicitudes/:id/devolver` | Coordinador | HU-05. Registra la devolución de un préstamo confirmado: se guarda la fecha real de devolución y el recurso vuelve a quedar "disponible" y a aparecer en el catálogo. Responde 400 si la solicitud no está confirmada o ya se devolvió; 403 si no eres coordinador; 404 si no existe. <!-- VERIFICAR: ruta, método y mensajes de error reales de HU-05 en api/ --> |
+| PATCH | `/solicitudes/:id/devolver` | Coordinador | HU-05. Registra la devolución de un préstamo confirmado: se guarda la fecha real de devolución y el recurso vuelve a quedar "disponible" y a aparecer en el catálogo. Responde 400 si la solicitud no está confirmada o ya se devolvió; 403 si no eres coordinador; 404 si no existe. |
+| POST | `/lista-espera` | Solicitante | HU-07. Se anota en la lista de espera de un recurso ocupado en esas fechas (`recursoId`, `inicio`, `fin`). El solicitante sale del token. Responde 400 si el recurso está libre en esas fechas (debe solicitarse directamente), si está averiado, si el fin es anterior al inicio o faltan fechas; 404 si no existe. |
+| GET | `/lista-espera` | Solicitante | HU-07. Lista las entradas en espera de la persona con sesión. |
+| PATCH | `/lista-espera/:id/cancelar` | Solicitante | HU-07. Cancela una entrada en lista de espera propia. |
 
 ## Seguridad
 
@@ -185,6 +189,24 @@ Criterios de aceptación:
 
 Evidencia: commits `52f10c2` (pruebas en ROJO) y `14a022d` (implementación en VERDE) de la rama `feature/hu-06-reportar-averia`; Vitest con 81 pruebas unitarias y 18 e2e de la API aprobadas tras fusionar con `main`, y CI en verde; prueba manual en la web (el recurso queda averiado y desaparece del catálogo; al intentar aprobar una solicitud de un recurso averiado la web muestra «El recurso está averiado y no se puede aprobar», mientras que rechazarla y aprobar una solicitud de un recurso disponible siguen funcionando); en la base de datos, `aprobar_solicitud` rechaza recursos averiados y `db/04_tests.sql` cubre los criterios (a) y (b). Pull request: #23.
 
+### HU-07: Lista de espera
+
+**Historia:** como solicitante quiero anotarme en una lista de espera cuando el recurso esté ocupado para pedirlo cuando se libere.
+
+| Campo | Valor |
+|---|---|
+| Prioridad (MoSCoW) | Should |
+| Estimación inicial | 5 puntos (se confirma con Planning Poker) |
+| Dependencia | HU-05 |
+| Incremento | 3 |
+
+Criterios de aceptación:
+
+- (a) Con el recurso ocupado puedo anotarme.
+- (b) Al liberarse, el primero de la lista pasa a "pendiente" y no se aprueba solo.
+
+Evidencia: módulo `lista-espera` en la API respaldado por 9 pruebas unitarias (`lista-espera.pg.service.spec.ts`) y 4 pruebas e2e (`lista-espera.e2e-spec.ts`); interfaz web en `App.tsx` con formulario para anotarse desde el catálogo, visualización del estado ("En espera", "Promovida a pendiente", "Cancelada") y cancelación voluntaria; función en base de datos `anotar_en_lista_espera` y promoción automática a "pendiente" al registrar devolución con `promover_lista_espera`.
+
 La web no tiene pruebas automáticas, así que el TDD (rojo y verde) se aplicó a la API y la web se verificó a mano.
 
 ## Trazabilidad: historia, pull request y prueba
@@ -199,6 +221,7 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-04: Aprobar o rechazar | #22 (issue #7) | `npm test` y `npm run test:e2e`; desarrollada con TDD (rojo, verde, refactor) |
 | HU-05: Registrar devolución | #24 (issue #8) | `npm test` y `npm run test:e2e` <!-- AJUSTAR: nombre de los archivos de prueba de HU-05 --> |
 | HU-06: Reportar avería | #23 (issue #9) | `npm test` (4 pruebas en `recursos.averia.spec.ts`) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
+| HU-07: Lista de espera | En revisión (PR pendiente) | `npm test` (9 pruebas en `lista-espera.pg.service.spec.ts`) y `npm run test:e2e` (4 pruebas en `lista-espera.e2e-spec.ts`) |
 
 Las tres primeras historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
 
