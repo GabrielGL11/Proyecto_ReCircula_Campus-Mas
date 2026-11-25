@@ -8,9 +8,9 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01 a HU-07 |
-| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01, HU-02 y HU-06), solicitudes (HU-03, HU-04 y HU-05) y lista de espera (HU-07) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
-| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01 a HU-07 con sesión iniciada |
+| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01 a HU-08 |
+| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01, HU-02 y HU-06), solicitudes (HU-03, HU-04 y HU-05) lista de espera (HU-07) y órdenes de reparación (HU-08) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
+| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01 a HU-08 con sesión iniciada |
 | `.github/workflows/` | Integración continua y despliegue de la web en AWS (GitHub Actions) | `ci.yml` y `deploy.yml`; configuración en [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) |
 | `scripts/` | Verificación posterior al despliegue y escaneo de secretos | `smoke-test.sh` y `check-secrets.sh` |
 | `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) (web), [`DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md) (API), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
@@ -39,11 +39,11 @@ Una CloudFront Function quita el prefijo `/api` (igual que el proxy de Vite) y o
 
 ## Roles y qué ve cada uno
 
-| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo | HU-04 Aprobar o rechazar | HU-05 Registrar devolución | HU-06 Reportar avería | HU-07 Lista de espera |
-|---|---|---|---|---|---|---|---|
-| Solicitante | No | Sí | Sí | No | No | Sí | Sí |
-| Propietario | Sí | Sí | No | Sí (solo sus recursos) | No | Sí | No |
-| Coordinador | Sí | Sí | No | Sí (todos) | Sí | Sí | No |
+| Rol | HU-01 Publicar recurso | HU-02 Consultar catálogo | HU-03 Solicitar préstamo | HU-04 Aprobar o rechazar | HU-05 Registrar devolución | HU-06 Reportar avería | HU-07 Lista de espera | HU-08 Orden de reparación |
+|---|---|---|---|---|---|---|---|---|
+| Solicitante | No | Sí | Sí | No | No | Sí | Sí | No |
+| Propietario | Sí | Sí | No | Sí (solo sus recursos) | No | Sí | No | No |
+| Coordinador | Sí | Sí | No | Sí (todos) | Sí | Sí | No | Sí |
 
 Ocultar una pantalla en la web es solo comodidad: la regla de verdad está en la API (responde 403) y en la base de datos (RNF-03). HU-06 no se limita por rol: cualquier persona con sesión puede reportar una avería.
 
@@ -128,10 +128,15 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | POST | `/lista-espera` | Solicitante | HU-07. Se anota en la lista de espera de un recurso ocupado en esas fechas (`recursoId`, `inicio`, `fin`). El solicitante sale del token. Responde 400 si el recurso está libre en esas fechas (debe solicitarse directamente), si está averiado, si el fin es anterior al inicio o faltan fechas; 403 si no eres solicitante; 404 si no existe; 409 si ya estás anotado en esa lista para esas mismas fechas. |
 | GET | `/lista-espera` | Solicitante | HU-07. Lista las entradas de lista de espera de la persona con sesión, con su estado: "en espera", "promovida" (pasó a solicitud pendiente) o "cancelada". |
 | PATCH | `/lista-espera/:id/cancelar` | Solicitante | HU-07. Cancela una entrada en lista de espera propia. Responde 400 si no existe o ya no está en espera. |
+| POST | `/ordenes-reparacion` | Coordinador | HU-08 (a). Abre una orden de reparación desde una avería (`averiaId`); nace "abierta". Responde 400 si falta la avería o el id no es válido; 403 si no eres coordinador; 404 si la avería no existe; 409 si esa avería ya tiene una orden. |
+| GET | `/ordenes-reparacion` | Coordinador | HU-08. Lista las órdenes con el recurso, la descripción de la avería y su estado; primero las que siguen en curso. |
+| GET | `/ordenes-reparacion/averias-sin-orden` | Coordinador | HU-08. Lista las averías reportadas que todavía no tienen orden de reparación. |
+| PATCH | `/ordenes-reparacion/:id/estado` | Coordinador | HU-08 (b) y (c). Cambia el estado de la orden (`estado`: `en_reparacion` o `resuelta`). Solo permite abierta → en_reparacion → resuelta; al resolver, el recurso vuelve a quedar "disponible". Responde 400 si el estado no es válido o se salta un paso (por ejemplo, abierta → resuelta); 403 si no eres coordinador; 404 si la orden no existe. |
+| GET | `/ordenes-reparacion/:id/historial` | Coordinador | HU-08 (d). Historial de la orden: estado anterior y nuevo, quién hizo el cambio y cuándo. Responde 403 si no eres coordinador; 404 si la orden no existe. |
 
 ## Seguridad
 
-- El propietario de un recurso, el solicitante de un préstamo, quien reporta una avería y quien se anota en la lista de espera salen siempre del token, nunca del body.
+- El propietario de un recurso, el solicitante de un préstamo, quien reporta una avería, quien se anota en la lista de espera y quien abre o avanza una orden de reparación salen siempre del token, nunca del body.
 - La web solo usa la clave pública de Supabase.
 - Los permisos también se aplican en la base de datos (RLS), no solo en la API.
 - La conexión a la base verifica el certificado de Supabase: si existe la variable `DB_SSL_CA_BASE64` (el CA de Supabase en base64, configurada en Lambda), `db.service.ts` usa `ssl: { ca, rejectUnauthorized: true }`. Sin esa variable (desarrollo local) cifra la conexión sin verificar el certificado.
@@ -213,6 +218,28 @@ Respaldo técnico: módulo `lista-espera` en la API con 9 pruebas unitarias (`li
 
 La web no tiene pruebas automáticas, así que el TDD (rojo y verde) se aplicó a la API y la web se verificó a mano.
 
+### HU-08: Orden de reparación
+
+**Historia:** como coordinador quiero una orden de reparación con estados para seguir cada avería.
+
+| Campo | Valor |
+|---|---|
+| Prioridad (MoSCoW) | Should |
+| Estimación inicial | 5 puntos (se confirma con Planning Poker) |
+| Dependencia | HU-06 |
+| Incremento | 3 |
+
+Criterios de aceptación:
+
+- (a) La orden nace "abierta" desde una avería.
+- (b) Solo permite abierta → en reparación → resuelta, sin saltar estados.
+- (c) Al resolverse, el recurso vuelve a estar disponible.
+- (d) Cada cambio de estado guarda la fecha y quién lo hizo.
+
+Evidencia: <!-- AGREGAR: pull request (n.º), prueba manual en la web con capturas (abrir la orden, intentar saltar de abierta a resuelta, resolver y ver el recurso otra vez en el catálogo, historial con quién y cuándo) y total de `npm test` -->
+
+Respaldo técnico: módulo `ordenes-reparacion` en la API (solo coordinador) con 31 pruebas unitarias (`ordenes-reparacion.pg.service.spec.ts`) y 6 pruebas e2e (`ordenes-reparacion.e2e-spec.ts`); `db-errores.spec.ts` comprueba que abrir una segunda orden para la misma avería responde 409; sección «Órdenes de reparación» en `App.tsx` solo para el coordinador, con las averías por atender, el botón para abrir la orden, un botón por estado (Iniciar reparación, Marcar como resuelta) y el historial de cada orden; en la base de datos, `abrir_orden_reparacion` crea la orden "abierta", el trigger `trg_orden_validar` impide saltar estados, `trg_orden_historial` guarda quién y cuándo (historial inmutable) y deja el recurso "disponible" al resolver; `db/04_tests.sql` cubre los criterios (a), (b), (c) y (d).
+
 ## Trazabilidad: historia, pull request y prueba
 
 Cada historia se integra mediante pull request revisado por un compañero del equipo.
@@ -226,6 +253,7 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-05: Registrar devolución | #24 (issue #8) | `npm test` y `npm run test:e2e` <!-- AJUSTAR: nombre de los archivos de prueba de HU-05 --> |
 | HU-06: Reportar avería | #23 (issue #9) | `npm test` (4 pruebas en `recursos.averia.spec.ts`) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
 | HU-07: Lista de espera | #25 (issue #10) | `npm test` (9 pruebas en `lista-espera.pg.service.spec.ts`) y `npm run test:e2e` (4 pruebas en `lista-espera.e2e-spec.ts`); `db/04_tests.sql` |
+| HU-08: Orden de reparación | <!-- AJUSTAR: n.º del PR e issue #11 --> | `npm test` (31 pruebas en `ordenes-reparacion.pg.service.spec.ts`) y `npm run test:e2e` (6 pruebas en `ordenes-reparacion.e2e-spec.ts`); `db/04_tests.sql` |
 
 Las tres primeras historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
 
@@ -243,7 +271,7 @@ Lista de pull requests: <https://github.com/GabrielGL11/Proyecto_ReCircula_Campu
 | ID | Requisito | Estado |
 |---|---|---|
 | RNF-01 | Accesibilidad básica: etiquetas visibles, contraste 4,5:1 y manejo por teclado | Formularios con etiquetas y alertas (`role="alert"`). Lighthouse (22/11/2026): login 100 y, con sesión de coordinación, 22/22 comprobaciones de accesibilidad superadas. Prueba con teclado: orden lógico, foco visible y «Aprobar» (HU-04) activable con Tab + Enter |
-| RNF-02 | Errores comprensibles que conservan lo escrito | Pruebas de casos negativos de HU-03 (fechas, recurso averiado, recurso inexistente), de HU-06 (descripción vacía o inválida) y de HU-07 (recurso libre y anotación duplicada con mensaje claro); formularios que no borran lo escrito |
+| RNF-02 | Errores comprensibles que conservan lo escrito | Pruebas de casos negativos de HU-03 (fechas, recurso averiado, recurso inexistente), de HU-06 (descripción vacía o inválida) y de HU-07 (recurso libre y anotación duplicada con mensaje claro) y de HU-08 (estado fuera del orden o salto de estados, orden duplicada); formularios que no borran lo escrito |
 | RNF-03 | Control de acceso por rol | Roles aplicados en la API y en la base de datos; pruebas de que un rol no autorizado recibe 403 |
 
 ## Estrategia de ramas y flujo de trabajo
@@ -288,10 +316,11 @@ Dos workflows en `.github/workflows/`:
 - [x] HU-05: registrar devolución (PR #24 fusionado)
 - [x] HU-06: reportar avería (PR #23 fusionado)
 - [x] HU-07: lista de espera (PR #25)
+- [x] HU-08: orden de reparación <!-- AJUSTAR: (PR n.º) -->
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
-- [x] HU-01 a HU-07 conectadas de punta a punta: web, API y base de datos
-- [ ] HU-08 en adelante (orden de reparación, panel de impacto, retiro por mantenimiento). La base de datos ya tiene las funciones; faltan la API y la web (HU-08 está en desarrollo)
+- [x] HU-01 a HU-08 conectadas de punta a punta: web, API y base de datos
+- [ ] HU-10 en adelante (panel de impacto, retiro por mantenimiento). La base de datos ya tiene las funciones; faltan la API y la web
 - [x] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
