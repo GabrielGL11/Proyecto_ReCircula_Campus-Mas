@@ -236,9 +236,52 @@ Criterios de aceptación:
 - (c) Al resolverse, el recurso vuelve a estar disponible.
 - (d) Cada cambio de estado guarda la fecha y quién lo hizo.
 
-Evidencia: <!-- AGREGAR: pull request (n.º), prueba manual en la web con capturas (abrir la orden, intentar saltar de abierta a resuelta, resolver y ver el recurso otra vez en el catálogo, historial con quién y cuándo) y total de `npm test` -->
+Evidencia: pull request #NN (issue #11), rama `feature/hu-08-orden-reparacion`. Prueba manual en la web como coordinador:
+
+- (a) Desde «Averías por atender», «Abrir orden» crea la orden n.º 6 de «Calculadora de prueba» en estado "Abierta", y la avería sale de la lista de pendientes.
+- (b) La orden abierta solo ofrece «Iniciar reparación»; después pasa a "En reparación" y solo ofrece «Marcar como resuelta». La web nunca ofrece el salto de abierta a resuelta y la base de datos lo rechaza con «Transición no permitida» (`db/04_tests.sql`).
+- (c) Mientras la orden está abierta o en reparación, el recurso no aparece en el catálogo; al marcarla como resuelta, «Calculadora de prueba» vuelve al catálogo como "Disponible".
+- (d) El historial de la orden muestra los tres cambios (abierta, abierta → en reparación y en reparación → resuelta) con quién los hizo (Coordinación ReCircula) y la fecha y hora de cada uno.
+
+Pruebas automáticas: `npm test` con 130 pruebas unitarias en verde (31 de órdenes de reparación), `npm run test:e2e` con 28 pruebas en verde (6 de órdenes de reparación) y `npm run build` sin errores; `db/04_tests.sql` ejecutado completo en Supabase.
 
 Respaldo técnico: módulo `ordenes-reparacion` en la API (solo coordinador) con 31 pruebas unitarias (`ordenes-reparacion.pg.service.spec.ts`) y 6 pruebas e2e (`ordenes-reparacion.e2e-spec.ts`); `db-errores.spec.ts` comprueba que abrir una segunda orden para la misma avería responde 409; sección «Órdenes de reparación» en `App.tsx` solo para el coordinador, con las averías por atender, el botón para abrir la orden, un botón por estado (Iniciar reparación, Marcar como resuelta) y el historial de cada orden; en la base de datos, `abrir_orden_reparacion` crea la orden "abierta", el trigger `trg_orden_validar` impide saltar estados, `trg_orden_historial` guarda quién y cuándo (historial inmutable) y deja el recurso "disponible" al resolver; `db/04_tests.sql` cubre los criterios (a), (b), (c) y (d).
+
+### HU-10: Panel de impacto
+
+**Historia:** como coordinador quiero un panel con préstamos completados, reparaciones y recursos reutilizados para medir el impacto.
+
+| Campo | Valor |
+|---|---|
+| Prioridad (MoSCoW) | Could |
+| Estimación inicial | 5 puntos (se confirma con Planning Poker) |
+| Dependencia | HU-05, HU-08 |
+| Incremento | 3 |
+
+Criterios de aceptación:
+
+- (a) Las cifras coinciden con los registros.
+- (b) Sin datos, el panel muestra ceros y no falla.
+
+Evidencia: pendiente (issue #12).
+
+### HU-11: Retirar recurso por mantenimiento
+
+**Historia:** como coordinador quiero retirar temporalmente un recurso por mantenimiento para que no se preste mientras se repara.
+
+| Campo | Valor |
+|---|---|
+| Prioridad (MoSCoW) | Must |
+| Estimación inicial | 3 puntos (se confirma con Planning Poker) |
+| Dependencia | HU-06 |
+| Incremento | 2 |
+
+Criterios de aceptación:
+
+- (a) Un recurso retirado no aparece en la búsqueda ni acepta solicitudes nuevas.
+- (b) Las solicitudes pendientes o confirmadas se conservan como "en espera por mantenimiento" y se reactivan al reincorporarlo.
+
+Evidencia: pendiente (issue #13).
 
 ## Trazabilidad: historia, pull request y prueba
 
@@ -253,7 +296,9 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-05: Registrar devolución | #24 (issue #8) | `npm test` y `npm run test:e2e` <!-- AJUSTAR: nombre de los archivos de prueba de HU-05 --> |
 | HU-06: Reportar avería | #23 (issue #9) | `npm test` (4 pruebas en `recursos.averia.spec.ts`) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
 | HU-07: Lista de espera | #25 (issue #10) | `npm test` (9 pruebas en `lista-espera.pg.service.spec.ts`) y `npm run test:e2e` (4 pruebas en `lista-espera.e2e-spec.ts`); `db/04_tests.sql` |
-| HU-08: Orden de reparación | <!-- AJUSTAR: n.º del PR e issue #11 --> | `npm test` (31 pruebas en `ordenes-reparacion.pg.service.spec.ts`) y `npm run test:e2e` (6 pruebas en `ordenes-reparacion.e2e-spec.ts`); `db/04_tests.sql` |
+| HU-08: Orden de reparación | #NN (issue #11) | `npm test` (31 pruebas en `ordenes-reparacion.pg.service.spec.ts`) y `npm run test:e2e` (6 pruebas en `ordenes-reparacion.e2e-spec.ts`); `db/04_tests.sql` |
+| HU-10: Panel de impacto | Pendiente (issue #12) | Pendiente |
+| HU-11: Retirar recurso por mantenimiento | Pendiente (issue #13) | Pendiente |
 
 Las tres primeras historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
 
@@ -316,11 +361,12 @@ Dos workflows en `.github/workflows/`:
 - [x] HU-05: registrar devolución (PR #24 fusionado)
 - [x] HU-06: reportar avería (PR #23 fusionado)
 - [x] HU-07: lista de espera (PR #25)
-- [x] HU-08: orden de reparación <!-- AJUSTAR: (PR n.º) -->
+- [x] HU-08: orden de reparación (PR #NN)
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
 - [x] HU-01 a HU-08 conectadas de punta a punta: web, API y base de datos
-- [ ] HU-10 en adelante (panel de impacto, retiro por mantenimiento). La base de datos ya tiene las funciones; faltan la API y la web
+- [ ] HU-10: panel de impacto (issue #12). La base de datos ya tiene las funciones; faltan la API y la web
+- [ ] HU-11: retirar recurso por mantenimiento (issue #13). La base de datos ya tiene las funciones; faltan la API y la web
 - [x] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
