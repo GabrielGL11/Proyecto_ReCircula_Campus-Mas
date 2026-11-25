@@ -106,3 +106,27 @@ export function reportarAveria(id: number, descripcion: string) {
     }),
   )
 }
+
+export interface EntradaEspera {
+  id: number
+  recursoId: number
+  recursoNombre: string
+  solicitanteId: number
+  rango: { inicio: string; fin: string }
+  estado: 'en_espera' | 'promovida' | 'cancelada'
+  solicitudId?: number | null
+  creadoEn: string
+}
+
+// HU-07: anotarse en la lista de espera de un recurso ocupado.
+export function anotarEnListaEspera(datos: { recursoId: number; inicio: string; fin: string }): Promise<EntradaEspera> {
+  return conMensajes(apiFetch<EntradaEspera>('/lista-espera', { method: 'POST', body: JSON.stringify(datos) }))
+}
+
+export function listarListaEspera(): Promise<EntradaEspera[]> {
+  return conMensajes(apiFetch<EntradaEspera[]>('/lista-espera'))
+}
+
+export function cancelarListaEspera(id: number): Promise<EntradaEspera> {
+  return conMensajes(apiFetch<EntradaEspera>(`/lista-espera/${id}/cancelar`, { method: 'PATCH' }))
+}

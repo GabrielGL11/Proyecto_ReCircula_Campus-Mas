@@ -6,9 +6,10 @@ import { AuthModule } from './auth/auth.module.js';
 import { DbModule } from './db/db.module.js';
 import { RecursosModule } from './recursos/recursos.module.js';
 import { SolicitudesModule } from './solicitudes/solicitudes.module.js';
+import { ListaEsperaModule } from './lista-espera/lista-espera.module.js';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), DbModule, AuthModule, RecursosModule, SolicitudesModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), DbModule, AuthModule, RecursosModule, SolicitudesModule, ListaEsperaModule],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -3,9 +3,12 @@ import './App.css'
 import './solicitudes.css'
 import {
   CATEGORIAS,
+  anotarEnListaEspera,
   aprobarSolicitud,
+  cancelarListaEspera,
   crearSolicitud,
   listarConfirmadas,
+  listarListaEspera,
   listarPendientes,
   listarRecursos,
   listarSolicitudes,
@@ -14,6 +17,7 @@ import {
   rechazarSolicitud,
   registrarDevolucion,
   reportarAveria,
+  type EntradaEspera,
   type Filtros,
   type Recurso,
   type Solicitud,
@@ -66,6 +70,16 @@ export default function App() {
   const [erroresSolicitud, setErroresSolicitud] = useState<string[]>([])
   const [confirmacionSolicitud, setConfirmacionSolicitud] = useState<string | null>(null)
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false)
+
+  // Lista de espera (HU-07)
+  const [listaEspera, setListaEspera] = useState<EntradaEspera[]>([])
+  const [recursoEspera, setRecursoEspera] = useState<number | null>(null)
+  const [inicioEspera, setInicioEspera] = useState('')
+  const [finEspera, setFinEspera] = useState('')
+  const [erroresEspera, setErroresEspera] = useState<string[]>([])
+  const [confirmacionEspera, setConfirmacionEspera] = useState<string | null>(null)
+  const [enviandoEspera, setEnviandoEspera] = useState(false)
+  const [cancelandoEspera, setCancelandoEspera] = useState<number | null>(null)
 
   // Reporte de avería (HU-06)
   const [recursoAveria, setRecursoAveria] = useState<number | null>(null)
@@ -166,6 +180,7 @@ export default function App() {
 
   function abrirSolicitud(id: number) {
     setRecursoElegido(id)
+    setRecursoEspera(null)
     setRecursoAveria(null)
     setDescripcionAveria('')
     setErroresAveria([])
@@ -183,6 +198,7 @@ export default function App() {
   function abrirAveria(id: number) {
     setRecursoAveria(id)
     setRecursoElegido(null)
+    setRecursoEspera(null)
     setErroresSolicitud([])
     setDescripcionAveria('')
     setErroresAveria([])
@@ -193,6 +209,68 @@ export default function App() {
     setRecursoAveria(null)
     setDescripcionAveria('')
     setErroresAveria([])
+  }
+
+  async function cargarListaEspera() {
+    try {
+      setListaEspera(await listarListaEspera())
+    } catch {
+      setListaEspera([])
+    }
+  }
+
+  function abrirEspera(id: number) {
+    setRecursoEspera(id)
+    setRecursoElegido(null)
+    setRecursoAveria(null)
+    setDescripcionAveria('')
+    setErroresAveria([])
+    setErroresSolicitud([])
+    setInicioEspera(desde)
+    setFinEspera(hasta)
+    setErroresEspera([])
+    setConfirmacionEspera(null)
+  }
+
+  function cancelarFormularioEspera() {
+    setRecursoEspera(null)
+    setErroresEspera([])
+  }
+
+  async function enviarEspera(e: FormEvent) {
+    e.preventDefault()
+    if (recursoEspera === null) return
+    setEnviandoEspera(true)
+    setErroresEspera([])
+    setConfirmacionEspera(null)
+    try {
+      const nueva = await anotarEnListaEspera({
+        recursoId: recursoEspera,
+        inicio: inicioEspera,
+        fin: finEspera,
+      })
+      setConfirmacionEspera(
+        `Te has anotado en la lista de espera de «${nueva.recursoNombre}» del ${formatoFecha(nueva.rango.inicio)} al ${formatoFecha(nueva.rango.fin)}. Cuando se libere, pasarás a solicitud pendiente.`,
+      )
+      setRecursoEspera(null)
+      await cargarListaEspera()
+    } catch (err) {
+      setErroresEspera(Array.isArray(err) ? (err as string[]) : ['No se pudo anotar en la lista de espera.'])
+    } finally {
+      setEnviandoEspera(false)
+    }
+  }
+
+  async function cancelarLugarEspera(id: number) {
+    setCancelandoEspera(id)
+    try {
+      await cancelarListaEspera(id)
+      await cargarListaEspera()
+    } catch {
+      await cargarListaEspera()
+    } finally {
+      setCancelandoEspera(null)
+    }
   }
 
   async function enviarAveria(e: FormEvent) {
@@ -263,7 +341,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (puedeSolicitar) void cargarSolicitudes()
+    if (puedeSolicitar) {
+      void cargarSolicitudes()
+      void cargarListaEspera()
+    }
   }, [puedeSolicitar])
 
   useEffect(() => {
@@ -450,16 +531,28 @@ export default function App() {
                   <span className="categoria">{etiquetaCategoria(r.categoria)}</span>
                   <span className={`estado ${r.estado}`}>{r.estado === 'disponible' ? 'Disponible' : 'Averiado'}</span>
                   {puedeSolicitar && (
-                    <button
-                      type="button"
-                      className="secundario"
-                      disabled={r.estado !== 'disponible'}
-                      aria-expanded={recursoElegido === r.id}
-                      aria-label={`Solicitar ${r.nombre}`}
-                      onClick={() => abrirSolicitud(r.id)}
-                    >
-                      Solicitar
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="secundario"
+                        disabled={r.estado !== 'disponible'}
+                        aria-expanded={recursoElegido === r.id}
+                        aria-label={`Solicitar ${r.nombre}`}
+                        onClick={() => abrirSolicitud(r.id)}
+                      >
+                        Solicitar
+                      </button>
+                      <button
+                        type="button"
+                        className="secundario"
+                        disabled={r.estado !== 'disponible'}
+                        aria-expanded={recursoEspera === r.id}
+                        aria-label={`Lista de espera de ${r.nombre}`}
+                        onClick={() => abrirEspera(r.id)}
+                      >
+                        Lista de espera
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"
@@ -549,6 +642,49 @@ export default function App() {
                     )}
                   </form>
                 )}
+
+                {recursoEspera === r.id && (
+                  <form onSubmit={enviarEspera} noValidate className="espera">
+                    <div className="campo">
+                      <label htmlFor={`inicio-espera-${r.id}`}>Inicio</label>
+                      <input
+                        id={`inicio-espera-${r.id}`}
+                        type="date"
+                        value={inicioEspera}
+                        onChange={(e) => setInicioEspera(e.target.value)}
+                        aria-invalid={erroresEspera.length > 0 && !inicioEspera}
+                      />
+                    </div>
+                    <div className="campo">
+                      <label htmlFor={`fin-espera-${r.id}`}>Fin</label>
+                      <input
+                        id={`fin-espera-${r.id}`}
+                        type="date"
+                        value={finEspera}
+                        onChange={(e) => setFinEspera(e.target.value)}
+                        aria-invalid={erroresEspera.length > 0 && !finEspera}
+                      />
+                    </div>
+                    <div className="acciones">
+                      <button type="submit" disabled={enviandoEspera}>
+                        {enviandoEspera ? 'Anotando…' : 'Anotarme en espera'}
+                      </button>
+                      <button type="button" className="secundario" onClick={cancelarFormularioEspera}>
+                        Cancelar
+                      </button>
+                    </div>
+                    {erroresEspera.length > 0 && (
+                      <div role="alert" className="mensaje error">
+                        <strong>No se pudo anotar en la lista de espera:</strong>
+                        <ul>
+                          {erroresEspera.map((m) => (
+                            <li key={m}>{m}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </form>
+                )}
               </li>
             ))}
           </ul>
@@ -559,6 +695,9 @@ export default function App() {
         </div>
         <div role="status" aria-live="polite">
           {confirmacionAveria && <p className="mensaje ok">{confirmacionAveria}</p>}
+        </div>
+        <div role="status" aria-live="polite">
+          {confirmacionEspera && <p className="mensaje ok">{confirmacionEspera}</p>}
         </div>
       </section>
 
@@ -696,6 +835,42 @@ export default function App() {
                       <span className="categoria">Devuelto el {formatoFecha(s.fechaDevolucionReal)}</span>
                     )}
                     <span className={`estado ${s.estado}`}>{s.estado.replaceAll('_', ' ')}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {puedeSolicitar && (
+        <section aria-labelledby="titulo-espera">
+          <h2 id="titulo-espera">Mi lista de espera</h2>
+          {listaEspera.length === 0 ? (
+            <p className="vacio">No estás en la lista de espera de ningún recurso.</p>
+          ) : (
+            <ul className="catalogo">
+              {listaEspera.map((e) => (
+                <li key={e.id}>
+                  <div className="fila fila-solicitud">
+                    <span className="nombre">{e.recursoNombre}</span>
+                    <span className="categoria">
+                      {formatoFecha(e.rango.inicio)} – {formatoFecha(e.rango.fin)}
+                    </span>
+                    <span className={`estado ${e.estado}`}>
+                      {e.estado === 'en_espera' ? 'En espera' : e.estado === 'promovida' ? 'Promovida a pendiente' : 'Cancelada'}
+                    </span>
+                    {e.estado === 'en_espera' && (
+                      <button
+                        type="button"
+                        className="secundario"
+                        disabled={cancelandoEspera === e.id}
+                        aria-label={`Cancelar espera de ${e.recursoNombre}`}
+                        onClick={() => void cancelarLugarEspera(e.id)}
+                      >
+                        {cancelandoEspera === e.id ? 'Cancelando…' : 'Cancelar espera'}
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}
