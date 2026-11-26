@@ -7,9 +7,18 @@ import { DbModule } from './db/db.module.js';
 import { RecursosModule } from './recursos/recursos.module.js';
 import { SolicitudesModule } from './solicitudes/solicitudes.module.js';
 import { ListaEsperaModule } from './lista-espera/lista-espera.module.js';
+import { OrdenesReparacionModule } from './ordenes-reparacion/ordenes-reparacion.module.js';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), DbModule, AuthModule, RecursosModule, SolicitudesModule, ListaEsperaModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    DbModule,
+    AuthModule,
+    RecursosModule,
+    SolicitudesModule,
+    ListaEsperaModule,
+    OrdenesReparacionModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

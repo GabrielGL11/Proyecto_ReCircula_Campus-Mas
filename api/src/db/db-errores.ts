@@ -15,6 +15,9 @@ export function traducirErrorDb(error: unknown): unknown {
       if (e.constraint === 'lista_espera_unica_idx') {
         return new ConflictException(['Ya estás en la lista de espera de este recurso para esas fechas.']);
       }
+      if (e.constraint === 'ordenes_reparacion_averia_id_key') {
+        return new ConflictException(['Esa avería ya tiene una orden de reparación.']);
+      }
       return new ConflictException(['Ya existe un registro con esos datos.']);
     case '42501': // sin permiso
       return new ForbiddenException([e.message ?? 'No tienes permiso para hacer esto.']);

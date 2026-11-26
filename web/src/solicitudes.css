@@ -3,6 +3,9 @@
 .catalogo .fila { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 16px; align-items: center; }
 .catalogo .fila-solicitud { grid-template-columns: 1fr auto auto; }
 .catalogo .fila-decision { grid-template-columns: 1fr auto auto; }
+.catalogo .fila-orden { grid-template-columns: 1fr auto auto; }
+.catalogo .fila-orden .nombre { display: flex; flex-direction: column; gap: 2px; }
+.catalogo .fila-orden .detalle { font-weight: 400; font-size: 0.85rem; color: var(--text); }
 .botones { display: flex; gap: 8px; }
 .catalogo .fila button { padding: 5px 14px; font-size: 0.85rem; }
 
@@ -50,6 +53,16 @@
 .estado.en_espera { background: #f3f0ff; color: #5b21b6; border-color: #ddd6fe; }
 .estado.promovida { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
 .estado.cancelada { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
+.estado.abierta { background: #fff8e6; color: #7a5200; border-color: #e6cf8f; }
+.estado.en_reparacion { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+.estado.resuelta { background: #f1f8f4; color: #1d5a37; border-color: #b7d9c4; }
+
+/* HU-08: subtítulos de la sección de órdenes y historial de cambios de estado */
+.pagina section h3 { font-size: 1rem; color: var(--text-h); margin: 20px 0 8px; }
+.catalogo .historial { margin-top: 10px; padding: 10px 14px; background: #fff; border: 1px solid var(--border); border-radius: 3px; font-size: 0.9rem; }
+.catalogo .historial ol { margin: 0; padding-left: 20px; }
+.catalogo .historial ol li { display: list-item; padding: 2px 0; border: 0; background: none; }
+.catalogo .historial p { margin: 0; }
 
 .catalogo .espera {
   display: grid;
@@ -68,6 +81,7 @@
 @media (max-width: 520px) {
   .catalogo .fila, .catalogo .fila-solicitud { grid-template-columns: 1fr auto; }
   .catalogo .fila-decision { grid-template-columns: 1fr; }
+  .catalogo .fila-orden { grid-template-columns: 1fr; }
   .catalogo .fila .categoria { grid-column: 1; }
   .catalogo .averia { grid-template-columns: 1fr; }
 }

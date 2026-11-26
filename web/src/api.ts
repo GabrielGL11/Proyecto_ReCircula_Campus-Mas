@@ -130,3 +130,63 @@ export function listarListaEspera(): Promise<EntradaEspera[]> {
 export function cancelarListaEspera(id: number): Promise<EntradaEspera> {
   return conMensajes(apiFetch<EntradaEspera>(`/lista-espera/${id}/cancelar`, { method: 'PATCH' }))
 }
+
+export type EstadoOrden = 'abierta' | 'en_reparacion' | 'resuelta'
+
+export interface OrdenReparacion {
+  id: number
+  averiaId: number
+  recursoId: number
+  recursoNombre: string
+  descripcion: string
+  estado: EstadoOrden
+  creadaPor: number
+  creadaEn: string
+  actualizadaEn: string
+}
+
+export interface AveriaSinOrden {
+  id: number
+  recursoId: number
+  recursoNombre: string
+  descripcion: string
+  reportadaEn: string
+}
+
+export interface CambioEstadoOrden {
+  id: number
+  ordenId: number
+  estadoAnterior: EstadoOrden | null
+  estadoNuevo: EstadoOrden
+  cambiadoPor: number
+  cambiadoPorNombre: string
+  cambiadoEn: string
+}
+
+// HU-08 (solo coordinador): averías que todavía no tienen orden de reparación.
+export function listarAveriasSinOrden(): Promise<AveriaSinOrden[]> {
+  return conMensajes(apiFetch<AveriaSinOrden[]>('/ordenes-reparacion/averias-sin-orden'))
+}
+
+export function listarOrdenes(): Promise<OrdenReparacion[]> {
+  return conMensajes(apiFetch<OrdenReparacion[]>('/ordenes-reparacion'))
+}
+
+// (a) La orden nace "abierta" desde una avería.
+export function abrirOrden(averiaId: number): Promise<OrdenReparacion> {
+  return conMensajes(
+    apiFetch<OrdenReparacion>('/ordenes-reparacion', { method: 'POST', body: JSON.stringify({ averiaId }) }),
+  )
+}
+
+// (b) y (c) Solo abierta → en_reparacion → resuelta; la base rechaza los saltos.
+export function avanzarOrden(id: number, estado: EstadoOrden): Promise<OrdenReparacion> {
+  return conMensajes(
+    apiFetch<OrdenReparacion>(`/ordenes-reparacion/${id}/estado`, { method: 'PATCH', body: JSON.stringify({ estado }) }),
+  )
+}
+
+// (d) Quién cambió cada estado y cuándo.
+export function listarHistorialOrden(id: number): Promise<CambioEstadoOrden[]> {
+  return conMensajes(apiFetch<CambioEstadoOrden[]>(`/ordenes-reparacion/${id}/historial`))
+}

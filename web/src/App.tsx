@@ -3,12 +3,17 @@ import './App.css'
 import './solicitudes.css'
 import {
   CATEGORIAS,
+  abrirOrden,
   anotarEnListaEspera,
   aprobarSolicitud,
+  avanzarOrden,
   cancelarListaEspera,
   crearSolicitud,
+  listarAveriasSinOrden,
   listarConfirmadas,
+  listarHistorialOrden,
   listarListaEspera,
+  listarOrdenes,
   listarPendientes,
   listarRecursos,
   listarSolicitudes,
@@ -17,8 +22,12 @@ import {
   rechazarSolicitud,
   registrarDevolucion,
   reportarAveria,
+  type AveriaSinOrden,
+  type CambioEstadoOrden,
   type EntradaEspera,
+  type EstadoOrden,
   type Filtros,
+  type OrdenReparacion,
   type Recurso,
   type Solicitud,
   type Usuario,
@@ -30,6 +39,22 @@ const formatoFecha = (iso: string) => iso.split('-').reverse().join('/')
 const etiquetaCategoria = (valor: string) =>
   CATEGORIAS.find((c) => c.valor === valor)?.etiqueta ?? valor
 
+// Fecha y hora local de un instante (el historial de las órdenes guarda cuándo cambió cada estado).
+const formatoFechaHora = (iso: string) =>
+  new Date(iso).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' })
+
+// HU-08: la orden solo avanza abierta → en reparación → resuelta, así que cada estado tiene un único "siguiente".
+const ETIQUETA_ORDEN: Record<EstadoOrden, string> = {
+  abierta: 'Abierta',
+  en_reparacion: 'En reparación',
+  resuelta: 'Resuelta',
+}
+const SIGUIENTE_ORDEN: Record<EstadoOrden, { estado: EstadoOrden; boton: string } | null> = {
+  abierta: { estado: 'en_reparacion', boton: 'Iniciar reparación' },
+  en_reparacion: { estado: 'resuelta', boton: 'Marcar como resuelta' },
+  resuelta: null,
+}
+
 export default function App() {
   const { session, cerrarSesion } = useSesion()
 
@@ -39,6 +64,7 @@ export default function App() {
   const puedeSolicitar = usuario?.rol === 'solicitante' // HU-03
   const puedeDecidir = usuario?.rol === 'propietario' || usuario?.rol === 'coordinador' // HU-04
   const puedeDevolver = usuario?.rol === 'coordinador'
+  const puedeGestionarOrdenes = usuario?.rol === 'coordinador' // HU-08
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
@@ -134,6 +160,91 @@ export default function App() {
       setErroresDevolucion(Array.isArray(err) ? (err as string[]) : ['No se pudo registrar la devolución.'])
     } finally {
       setDevolviendo(null)
+    }
+  }
+
+  // Órdenes de reparación (HU-08)
+  const [ordenes, setOrdenes] = useState<OrdenReparacion[]>([])
+  const [averiasSinOrden, setAveriasSinOrden] = useState<AveriaSinOrden[]>([])
+  const [cargandoOrdenes, setCargandoOrdenes] = useState(true)
+  const [errorOrdenes, setErrorOrdenes] = useState(false)
+  const [trabajandoOrden, setTrabajandoOrden] = useState(false)
+  const [erroresOrden, setErroresOrden] = useState<string[]>([])
+  const [mensajeOrden, setMensajeOrden] = useState<string | null>(null)
+  const [historialAbierto, setHistorialAbierto] = useState<number | null>(null)
+  const [historial, setHistorial] = useState<CambioEstadoOrden[]>([])
+  const [errorHistorial, setErrorHistorial] = useState<string | null>(null)
+
+  async function cargarOrdenes() {
+    try {
+      const [listaOrdenes, listaAverias] = await Promise.all([listarOrdenes(), listarAveriasSinOrden()])
+      setOrdenes(listaOrdenes)
+      setAveriasSinOrden(listaAverias)
+      setErrorOrdenes(false)
+    } catch {
+      setErrorOrdenes(true)
+    } finally {
+      setCargandoOrdenes(false)
+    }
+  }
+
+  async function cargarHistorial(id: number) {
+    try {
+      setHistorial(await listarHistorialOrden(id))
+      setErrorHistorial(null)
+    } catch (err) {
+      setErrorHistorial(Array.isArray(err) ? (err as string[]).join(' ') : 'No se pudo cargar el historial.')
+    }
+  }
+
+  async function alternarHistorial(orden: OrdenReparacion) {
+    if (historialAbierto === orden.id) {
+      setHistorialAbierto(null)
+      return
+    }
+    setHistorialAbierto(orden.id)
+    setHistorial([])
+    setErrorHistorial(null)
+    await cargarHistorial(orden.id)
+  }
+
+  // (a) La orden nace "abierta" desde una avería reportada.
+  async function abrirOrdenDe(averia: AveriaSinOrden) {
+    setTrabajandoOrden(true)
+    setErroresOrden([])
+    setMensajeOrden(null)
+    try {
+      const orden = await abrirOrden(averia.id)
+      setMensajeOrden(`Orden n.º ${orden.id} abierta para «${averia.recursoNombre}».`)
+      await cargarOrdenes()
+    } catch (err) {
+      setErroresOrden(Array.isArray(err) ? (err as string[]) : ['No se pudo abrir la orden de reparación.'])
+    } finally {
+      setTrabajandoOrden(false)
+    }
+  }
+
+  // (b), (c) y (d) Un solo paso a la vez; al resolver, el recurso vuelve al catálogo.
+  async function avanzarEstadoOrden(orden: OrdenReparacion, nuevo: EstadoOrden) {
+    setTrabajandoOrden(true)
+    setErroresOrden([])
+    setMensajeOrden(null)
+    try {
+      await avanzarOrden(orden.id, nuevo)
+      setMensajeOrden(
+        nuevo === 'resuelta'
+          ? `Orden n.º ${orden.id} resuelta: «${orden.recursoNombre}» vuelve a estar disponible.`
+          : `Orden n.º ${orden.id} de «${orden.recursoNombre}»: ${ETIQUETA_ORDEN[nuevo].toLowerCase()}.`,
+      )
+      await Promise.all([
+        cargarOrdenes(),
+        cargar(filtrosAplicados.current),
+        historialAbierto === orden.id ? cargarHistorial(orden.id) : Promise.resolve(),
+      ])
+    } catch (err) {
+      setErroresOrden(Array.isArray(err) ? (err as string[]) : ['No se pudo cambiar el estado de la orden.'])
+    } finally {
+      setTrabajandoOrden(false)
     }
   }
 
@@ -285,6 +396,7 @@ export default function App() {
       setRecursoAveria(null)
       setDescripcionAveria('')
       await cargar(filtrosActivos ? { categoria: filtroCategoria, desde, hasta } : {})
+      if (puedeGestionarOrdenes) void cargarOrdenes()
     } catch (err) {
       setErroresAveria(Array.isArray(err) ? (err as string[]) : ['No se pudo reportar la avería.'])
     } finally {
@@ -354,6 +466,10 @@ export default function App() {
   useEffect(() => {
     if (puedeDevolver) void cargarConfirmadas()
   }, [puedeDevolver])
+
+  useEffect(() => {
+    if (puedeGestionarOrdenes) void cargarOrdenes()
+  }, [puedeGestionarOrdenes])
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
@@ -813,6 +929,143 @@ export default function App() {
           )}
           <div role="status">
             {mensajeDevolucion && <p className="mensaje ok">{mensajeDevolucion}</p>}
+          </div>
+        </section>
+      )}
+
+      {puedeGestionarOrdenes && (
+        <section aria-labelledby="titulo-ordenes">
+          <h2 id="titulo-ordenes">Órdenes de reparación</h2>
+          {cargandoOrdenes && <p role="status">Cargando órdenes…</p>}
+          {errorOrdenes && (
+            <div role="alert" className="mensaje error">
+              <p>No se pudieron cargar las órdenes de reparación.</p>
+              <button
+                type="button"
+                disabled={cargandoOrdenes}
+                onClick={() => {
+                  setCargandoOrdenes(true)
+                  void cargarOrdenes()
+                }}
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {!cargandoOrdenes && !errorOrdenes && (
+            <>
+              <h3 id="titulo-averias-sin-orden">Averías por atender</h3>
+              {averiasSinOrden.length === 0 ? (
+                <p className="vacio">No hay averías sin orden de reparación.</p>
+              ) : (
+                <ul className="catalogo" aria-labelledby="titulo-averias-sin-orden">
+                  {averiasSinOrden.map((a) => (
+                    <li key={a.id}>
+                      <div className="fila fila-orden">
+                        <span className="nombre">
+                          {a.recursoNombre}
+                          <small className="detalle">
+                            {a.descripcion} · Reportada el {formatoFechaHora(a.reportadaEn)}
+                          </small>
+                        </span>
+                        <span className="botones">
+                          <button
+                            type="button"
+                            disabled={trabajandoOrden}
+                            aria-label={`Abrir orden de reparación de ${a.recursoNombre}, avería n.º ${a.id}`}
+                            onClick={() => void abrirOrdenDe(a)}
+                          >
+                            Abrir orden
+                          </button>
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <h3 id="titulo-ordenes-lista">Órdenes</h3>
+              {ordenes.length === 0 ? (
+                <p className="vacio">Todavía no hay órdenes de reparación.</p>
+              ) : (
+                <ul className="catalogo" aria-labelledby="titulo-ordenes-lista">
+                  {ordenes.map((o) => {
+                    const siguiente = SIGUIENTE_ORDEN[o.estado]
+                    return (
+                      <li key={o.id}>
+                        <div className="fila fila-orden">
+                          <span className="nombre">
+                            {o.recursoNombre}
+                            <small className="detalle">
+                              Orden n.º {o.id} · {o.descripcion}
+                            </small>
+                          </span>
+                          <span className={`estado ${o.estado}`}>{ETIQUETA_ORDEN[o.estado]}</span>
+                          <span className="botones">
+                            {siguiente && (
+                              <button
+                                type="button"
+                                disabled={trabajandoOrden}
+                                aria-label={`${siguiente.boton}: orden n.º ${o.id} de ${o.recursoNombre}`}
+                                onClick={() => void avanzarEstadoOrden(o, siguiente.estado)}
+                              >
+                                {siguiente.boton}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="secundario"
+                              aria-expanded={historialAbierto === o.id}
+                              aria-label={`${historialAbierto === o.id ? 'Ocultar' : 'Ver'} historial de la orden n.º ${o.id}`}
+                              onClick={() => void alternarHistorial(o)}
+                            >
+                              {historialAbierto === o.id ? 'Ocultar historial' : 'Historial'}
+                            </button>
+                          </span>
+                        </div>
+                        {historialAbierto === o.id && (
+                          <div className="historial">
+                            {errorHistorial ? (
+                              <p role="alert" className="mensaje error">
+                                {errorHistorial}
+                              </p>
+                            ) : historial.length === 0 ? (
+                              <p role="status">Cargando historial…</p>
+                            ) : (
+                              <ol>
+                                {historial.map((c) => (
+                                  <li key={c.id}>
+                                    {c.estadoAnterior === null
+                                      ? `Orden abierta (${ETIQUETA_ORDEN[c.estadoNuevo]})`
+                                      : `${ETIQUETA_ORDEN[c.estadoAnterior]} → ${ETIQUETA_ORDEN[c.estadoNuevo]}`}{' '}
+                                    · {c.cambiadoPorNombre} · {formatoFechaHora(c.cambiadoEn)}
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </>
+          )}
+
+          {erroresOrden.length > 0 && (
+            <div role="alert" className="mensaje error">
+              <strong>No se pudo completar la acción:</strong>
+              <ul>
+                {erroresOrden.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div role="status" aria-live="polite">
+            {mensajeOrden && <p className="mensaje ok">{mensajeOrden}</p>}
           </div>
         </section>
       )}
