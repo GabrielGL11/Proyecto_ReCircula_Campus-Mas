@@ -360,8 +360,8 @@ Dos workflows en `.github/workflows/`:
 - [x] HU-04: aprobar o rechazar solicitud (PR #22 fusionado)
 - [x] HU-05: registrar devolución (PR #24 fusionado)
 - [x] HU-06: reportar avería (PR #23 fusionado)
-- [x] HU-07: lista de espera (PR #25)
-- [x] HU-08: orden de reparación (PR #NN)
+- [x] HU-07: lista de espera (PR #25 fusionado)
+- [x] HU-08: orden de reparación (PR #26)
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
 - [x] HU-01 a HU-08 conectadas de punta a punta: web, API y base de datos
