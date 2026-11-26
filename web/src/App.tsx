@@ -396,6 +396,7 @@ export default function App() {
       setRecursoAveria(null)
       setDescripcionAveria('')
       await cargar(filtrosActivos ? { categoria: filtroCategoria, desde, hasta } : {})
+      if (puedeGestionarOrdenes) void cargarOrdenes()
     } catch (err) {
       setErroresAveria(Array.isArray(err) ? (err as string[]) : ['No se pudo reportar la avería.'])
     } finally {
