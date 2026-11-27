@@ -198,3 +198,13 @@ export function avanzarOrden(id: number, estado: EstadoOrden): Promise<OrdenRepa
 export function listarHistorialOrden(id: number): Promise<CambioEstadoOrden[]> {
   return conMensajes(apiFetch<CambioEstadoOrden[]>(`/ordenes-reparacion/${id}/historial`))
 }
+
+export interface PanelImpacto {
+  prestamosCompletados: number
+  reparacionesResueltas: number
+  recursosReutilizados: number
+}
+
+export function obtenerImpacto(): Promise<PanelImpacto> {
+  return conMensajes(apiFetch<PanelImpacto>('/impacto'))
+}
