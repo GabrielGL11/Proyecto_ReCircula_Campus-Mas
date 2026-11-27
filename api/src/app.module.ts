@@ -8,6 +8,7 @@ import { RecursosModule } from './recursos/recursos.module.js';
 import { SolicitudesModule } from './solicitudes/solicitudes.module.js';
 import { ListaEsperaModule } from './lista-espera/lista-espera.module.js';
 import { OrdenesReparacionModule } from './ordenes-reparacion/ordenes-reparacion.module.js';
+import { ImpactoModule } from './impacto/impacto.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { OrdenesReparacionModule } from './ordenes-reparacion/ordenes-reparacion
     SolicitudesModule,
     ListaEsperaModule,
     OrdenesReparacionModule,
+    ImpactoModule,
   ],
   controllers: [AppController],
   providers: [AppService],
