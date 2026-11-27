@@ -1,36 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
 import './solicitudes.css'
-import {
-  CATEGORIAS,
-  abrirOrden,
-  anotarEnListaEspera,
-  aprobarSolicitud,
-  avanzarOrden,
-  cancelarListaEspera,
-  crearSolicitud,
-  listarAveriasSinOrden,
-  listarConfirmadas,
-  listarHistorialOrden,
-  listarListaEspera,
-  listarOrdenes,
-  listarPendientes,
-  listarRecursos,
-  listarSolicitudes,
-  obtenerUsuario,
-  publicarRecurso,
-  rechazarSolicitud,
-  registrarDevolucion,
-  reportarAveria,
-  type AveriaSinOrden,
-  type CambioEstadoOrden,
-  type EntradaEspera,
-  type EstadoOrden,
-  type Filtros,
-  type OrdenReparacion,
-  type Recurso,
-  type Solicitud,
-  type Usuario,
+import {CATEGORIAS,abrirOrden,anotarEnListaEspera,aprobarSolicitud,avanzarOrden,cancelarListaEspera,crearSolicitud,listarAveriasSinOrden,listarConfirmadas,listarHistorialOrden,listarListaEspera,listarOrdenes,listarPendientes,listarRecursos,listarSolicitudes,obtenerImpacto,obtenerUsuario,publicarRecurso,rechazarSolicitud,registrarDevolucion,reportarAveria,type AveriaSinOrden,type CambioEstadoOrden,type EntradaEspera,type EstadoOrden,type Filtros,type OrdenReparacion,type PanelImpacto,type Recurso,type Solicitud,type Usuario,
 } from './api.ts'
 import { useSesion } from './auth/sesion.ts'
 
@@ -55,6 +26,7 @@ const SIGUIENTE_ORDEN: Record<EstadoOrden, { estado: EstadoOrden; boton: string 
   resuelta: null,
 }
 
+
 export default function App() {
   const { session, cerrarSesion } = useSesion()
 
@@ -65,6 +37,9 @@ export default function App() {
   const puedeDecidir = usuario?.rol === 'propietario' || usuario?.rol === 'coordinador' // HU-04
   const puedeDevolver = usuario?.rol === 'coordinador'
   const puedeGestionarOrdenes = usuario?.rol === 'coordinador' // HU-08
+  const [impacto, setImpacto] = useState<PanelImpacto | null>(null)
+  const [cargandoImpacto, setCargandoImpacto] = useState(false)
+  const [errorImpacto, setErrorImpacto] = useState(false)
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
@@ -127,6 +102,18 @@ export default function App() {
   const [erroresDevolucion, setErroresDevolucion] = useState<string[]>([])
   const [mensajeDevolucion, setMensajeDevolucion] = useState<string | null>(null)
 
+  async function cargarImpacto() {
+    setCargandoImpacto(true)
+    try {
+      setImpacto(await obtenerImpacto())
+      setErrorImpacto(false)
+    } catch {
+      setErrorImpacto(true)
+    } finally {
+      setCargandoImpacto(false)
+    }
+  }
+
   async function cargarConfirmadas() {
     try {
       setConfirmadas(await listarConfirmadas())
@@ -155,6 +142,7 @@ export default function App() {
         cargarConfirmadas(),
         cargarPendientes(),
         cargar(filtrosAplicados.current),
+        cargarImpacto(),
       ])
     } catch (err) {
       setErroresDevolucion(Array.isArray(err) ? (err as string[]) : ['No se pudo registrar la devolución.'])
@@ -240,6 +228,7 @@ export default function App() {
         cargarOrdenes(),
         cargar(filtrosAplicados.current),
         historialAbierto === orden.id ? cargarHistorial(orden.id) : Promise.resolve(),
+        nuevo === 'resuelta' ? cargarImpacto() : Promise.resolve(),
       ])
     } catch (err) {
       setErroresOrden(Array.isArray(err) ? (err as string[]) : ['No se pudo cambiar el estado de la orden.'])
@@ -468,7 +457,14 @@ export default function App() {
   }, [puedeDevolver])
 
   useEffect(() => {
-    if (puedeGestionarOrdenes) void cargarOrdenes()
+    if (puedeGestionarOrdenes) {
+      void cargarOrdenes()
+      void cargarImpacto()
+    } else {
+      setImpacto(null)
+      setErrorImpacto(false)
+      setCargandoImpacto(false)
+    }
   }, [puedeGestionarOrdenes])
 
   async function enviar(e: FormEvent) {
@@ -527,6 +523,34 @@ export default function App() {
           </button>
         </p>
       </header>
+
+      {usuario?.rol === 'coordinador' && (
+        <section aria-labelledby="titulo-impacto">
+          <h2 id="titulo-impacto">Panel de impacto</h2>
+          {cargandoImpacto && <p role="status">Cargando impacto…</p>}
+          {errorImpacto && (
+            <p role="alert" className="mensaje error">
+              No se pudo cargar el panel de impacto.
+            </p>
+          )}
+          {!cargandoImpacto && !errorImpacto && impacto && (
+            <div className="panel-impacto">
+              <div>
+                <strong>{impacto.prestamosCompletados}</strong>
+                <span>Préstamos completados</span>
+              </div>
+              <div>
+                <strong>{impacto.reparacionesResueltas}</strong>
+                <span>Reparaciones resueltas</span>
+              </div>
+              <div>
+                <strong>{impacto.recursosReutilizados}</strong>
+                <span>Recursos reutilizados</span>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {puedePublicar && (
         <section aria-labelledby="titulo-form">

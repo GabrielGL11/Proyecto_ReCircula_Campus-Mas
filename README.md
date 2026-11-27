@@ -373,3 +373,32 @@ Dos workflows en `.github/workflows/`:
 - [x] Despliegue de la API en AWS Lambda detrás de CloudFront (`/api/*`)
 - [x] Automatizar el despliegue de la API en el pipeline (`deploy.yml`: imagen en ECR + Lambda)
 - [x] Verificar el certificado de la base de datos (`ssl` en `db.service.ts`)
+
+### HU-10: Panel de impacto
+
+Se implementó un panel de impacto visible para el coordinador. La pantalla consulta el endpoint `GET /impacto` y muestra tres cifras: préstamos completados, reparaciones resueltas y recursos reutilizados. Los datos se calculan a partir de los registros de solicitudes y órdenes de reparación mediante la vista `v_panel_impacto`.
+
+Si no hay registros, el panel muestra ceros. Si ocurre un error al cargar los datos, muestra un mensaje 
+
+### HU-10: Panel de impacto
+
+**Historia:** Como coordinador, quiero un panel con préstamos completados, reparaciones resueltas y recursos reutilizados para medir el impacto del sistema.
+
+**Implementación:** Se agregó un panel que solo se muestra a usuarios con rol de coordinador. La web consulta el endpoint autenticado `GET /impacto` y presenta tres indicadores: préstamos completados, reparaciones resueltas y recursos reutilizados. Mientras carga los datos, la pantalla muestra el estado de carga; si la petición falla, presenta un mensaje y permite reintentar.
+
+La API calcula los indicadores consultando la vista `v_panel_impacto` de PostgreSQL. La vista cuenta las solicitudes devueltas, las órdenes de reparación resueltas y los recursos distintos que aparecen en solicitudes devueltas. Si no hay registros, devuelve ceros. El endpoint restringe el acceso a la coordinación.
+
+**Archivos principales:**
+
+- `db/01_schema.sql`: definición de la vista `v_panel_impacto`.
+- `db/04_tests.sql`: comprobaciones SQL que comparan los indicadores con los registros.
+- `api/src/impacto/impacto.controller.ts`: endpoint `GET /impacto` y control de acceso.
+- `api/src/impacto/impacto.service.ts`: consulta de la vista y conversión de resultados.
+- `api/src/impacto/impacto.service.spec.ts`: pruebas del servicio y permisos.
+- `api/src/app.module.ts`: registro del módulo de impacto.
+- `web/src/api.ts`: tipo y función para consultar el endpoint.
+- `web/src/App.tsx` y `web/src/App.css`: carga, visualización y estilos del panel.
+
+**Verificación:** Se ejecutó `npm test -- impacto.service.spec.ts`. Resultado: **5 pruebas aprobadas**. Estas verifican que el servicio devuelva las cifras recibidas, que responda con ceros cuando no hay filas y que solo el coordinador pueda consultar el panel.
+
+En la prueba visual con una cuenta coordinadora, el panel mostró **7 préstamos completados, 5 reparaciones resueltas y 4 recursos reutilizados**. Estas cifras corresponden a los datos existentes en el entorno usado para la captura.
