@@ -8,9 +8,9 @@ Proyecto de Modelado Ágil de Software (IS-505, 2026-2, Paralelo B), Software 5�
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
-| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01 a HU-08 |
-| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01, HU-02 y HU-06), solicitudes (HU-03, HU-04 y HU-05) lista de espera (HU-07) y órdenes de reparación (HU-08) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
-| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01 a HU-08 con sesión iniciada |
+| `db/` | Base de datos en Supabase (PostgreSQL): esquema, reglas de negocio, permisos, datos de demo y pruebas | Esquema completo; la API usa hoy HU-01 a HU-08, HU-10 y HU-11 |
+| `api/` | Backend: NestJS (ESM) + Vitest. Valida el login de Supabase y consulta la base con SQL | Recursos (HU-01, HU-02 y HU-06), solicitudes (HU-03, HU-04 y HU-05) lista de espera (HU-07) órdenes de reparación (HU-08), panel de impacto (HU-10) y mantenimiento de recursos (HU-11) sobre la base de datos. Se empaqueta con el `Dockerfile` y corre en AWS Lambda ([`docs/DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md)) |
+| `web/` | Frontend: Vite + React + TypeScript. Login con Supabase Auth y pantallas según el rol | HU-01 a HU-08, HU-10 y HU-11 con sesión iniciada |
 | `.github/workflows/` | Integración continua y despliegue de la web en AWS (GitHub Actions) | `ci.yml` y `deploy.yml`; configuración en [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) |
 | `scripts/` | Verificación posterior al despliegue y escaneo de secretos | `smoke-test.sh` y `check-secrets.sh` |
 | `docs/` | Guías de despliegue y de la práctica DevOps, y evidencias | [`DEPLOY-AWS.md`](docs/DEPLOY-AWS.md) (web), [`DEPLOY-API-AWS.md`](docs/DEPLOY-API-AWS.md) (API), [`PRACTICA-DEVOPS.md`](docs/PRACTICA-DEVOPS.md) |
@@ -44,6 +44,8 @@ Una CloudFront Function quita el prefijo `/api` (igual que el proxy de Vite) y o
 | Solicitante | No | Sí | Sí | No | No | Sí | Sí | No |
 | Propietario | Sí | Sí | No | Sí (solo sus recursos) | No | Sí | No | No |
 | Coordinador | Sí | Sí | No | Sí (todos) | Sí | Sí | No | Sí |
+
+El panel de impacto (HU-10), el mantenimiento de recursos (HU-11), la lista de préstamos confirmados y las órdenes de reparación (HU-08) son solo del coordinador.
 
 Ocultar una pantalla en la web es solo comodidad: la regla de verdad está en la API (responde 403) y en la base de datos (RNF-03). HU-06 no se limita por rol: cualquier persona con sesión puede reportar una avería.
 
@@ -119,11 +121,15 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | POST | `/recursos` | Propietario o coordinador | HU-01. Publica un recurso (`nombre` y `categoria` obligatorios). Queda "disponible" a nombre de quien tiene la sesión. Un body inválido responde 400 con la lista de errores. |
 | GET | `/recursos` | Cualquiera | HU-02. Lista el catálogo. Filtros opcionales: `categoria`, `desde` y `hasta` (AAAA-MM-DD). Con fechas excluye recursos con préstamo confirmado en ese rango. No muestra recursos averiados ni retirados. |
 | POST | `/recursos/:id/averias` | Cualquiera | HU-06. Reporta una avería de un recurso (`descripcion` obligatoria). El recurso pasa a "averiado" y deja de aparecer en el catálogo y de poder prestarse. El reporte queda a nombre de quien tiene la sesión (sale del token). Responde 400 si la descripción está vacía, en blanco o no es texto, o si la base rechaza el reporte; 404 si el recurso no existe. |
+| GET | `/recursos/mantenimiento` | Coordinador | HU-11. Lista todos los recursos (también averiados y retirados) con su estado, para gestionar el mantenimiento. |
+| PATCH | `/recursos/:id/retirar` | Coordinador | HU-11. Retira el recurso por mantenimiento: deja de aparecer en el catálogo y no acepta solicitudes nuevas; sus solicitudes pendientes o confirmadas pasan a "en espera por mantenimiento". Responde 400 si ya está retirado o si está averiado (primero se resuelve su orden de reparación); 403 si no eres coordinador; 404 si no existe. |
+| PATCH | `/recursos/:id/reincorporar` | Coordinador | HU-11. El recurso vuelve a quedar "disponible" y sus solicitudes se reactivan con el estado que tenían. Responde 400 si el recurso no está retirado; 403 si no eres coordinador; 404 si no existe. |
 | POST | `/solicitudes` | Solicitante | HU-03. Crea una solicitud de préstamo (`recursoId`, `inicio`, `fin`). Con fechas válidas queda "pendiente". El solicitante sale del token. Responde 400 si el fin es anterior al inicio, el inicio ya pasó, faltan fechas, son inválidas, el recurso está averiado o ya tienes una solicitud pendiente idéntica; 404 si el recurso no existe. |
 | GET | `/solicitudes` | Solicitante | Lista las solicitudes de la persona con sesión. |
 | GET | `/solicitudes/pendientes` | Propietario o coordinador | HU-04. Lista las solicitudes pendientes por decidir: el propietario ve las de sus recursos; el coordinador, todas. |
 | PATCH | `/solicitudes/:id/aprobar` | Propietario del recurso o coordinador | HU-04. La solicitud queda "confirmada" y el recurso se bloquea en esas fechas. Responde 400 si se superpone con un préstamo confirmado (sigue pendiente), si el recurso está averiado o si ya no está pendiente; 403 si no eres el propietario ni el coordinador; 404 si no existe. |
 | PATCH | `/solicitudes/:id/rechazar` | Propietario del recurso o coordinador | HU-04. La solicitud pasa a "rechazada". Mismos 400, 403 y 404 que aprobar. |
+| GET | `/solicitudes/confirmadas` | Coordinador | HU-05. Lista los préstamos confirmados pendientes de devolución. Responde 403 si no eres coordinador. |
 | PATCH | `/solicitudes/:id/devolucion` | Coordinador | HU-05. Registra la devolución de un préstamo confirmado: se guarda la fecha real de devolución y el recurso vuelve a quedar "disponible" y a aparecer en el catálogo. Si hay personas en lista de espera, la primera pasa a una solicitud "pendiente" (HU-07). Responde 400 si la solicitud no está confirmada o ya se devolvió; 403 si no eres coordinador; 404 si no existe. |
 | POST | `/lista-espera` | Solicitante | HU-07. Se anota en la lista de espera de un recurso ocupado en esas fechas (`recursoId`, `inicio`, `fin`). El solicitante sale del token. Responde 400 si el recurso está libre en esas fechas (debe solicitarse directamente), si está averiado, si el fin es anterior al inicio o faltan fechas; 403 si no eres solicitante; 404 si no existe; 409 si ya estás anotado en esa lista para esas mismas fechas. |
 | GET | `/lista-espera` | Solicitante | HU-07. Lista las entradas de lista de espera de la persona con sesión, con su estado: "en espera", "promovida" (pasó a solicitud pendiente) o "cancelada". |
@@ -133,6 +139,7 @@ Todas las rutas piden `Authorization: Bearer <token de Supabase>`. Sin sesión r
 | GET | `/ordenes-reparacion/averias-sin-orden` | Coordinador | HU-08. Lista las averías reportadas que todavía no tienen orden de reparación. |
 | PATCH | `/ordenes-reparacion/:id/estado` | Coordinador | HU-08 (b) y (c). Cambia el estado de la orden (`estado`: `en_reparacion` o `resuelta`). Solo permite abierta → en_reparacion → resuelta; al resolver, el recurso vuelve a quedar "disponible". Responde 400 si el estado no es válido o se salta un paso (por ejemplo, abierta → resuelta); 403 si no eres coordinador; 404 si la orden no existe. |
 | GET | `/ordenes-reparacion/:id/historial` | Coordinador | HU-08 (d). Historial de la orden: estado anterior y nuevo, quién hizo el cambio y cuándo. Responde 403 si no eres coordinador; 404 si la orden no existe. |
+| GET | `/impacto` | Coordinador | HU-10. Devuelve `prestamosCompletados`, `reparacionesResueltas` y `recursosReutilizados` (ceros si no hay datos). Responde 403 si no eres coordinador. |
 
 ## Seguridad
 
@@ -236,7 +243,7 @@ Criterios de aceptación:
 - (c) Al resolverse, el recurso vuelve a estar disponible.
 - (d) Cada cambio de estado guarda la fecha y quién lo hizo.
 
-Evidencia: pull request #NN (issue #11), rama `feature/hu-08-orden-reparacion`. Prueba manual en la web como coordinador:
+Evidencia: pull request #26 (issue #11), rama `feature/hu-08-orden-reparacion`. Prueba manual en la web como coordinador:
 
 - (a) Desde «Averías por atender», «Abrir orden» crea la orden n.º 6 de «Calculadora de prueba» en estado "Abierta", y la avería sale de la lista de pendientes.
 - (b) La orden abierta solo ofrece «Iniciar reparación»; después pasa a "En reparación" y solo ofrece «Marcar como resuelta». La web nunca ofrece el salto de abierta a resuelta y la base de datos lo rechaza con «Transición no permitida» (`db/04_tests.sql`).
@@ -263,7 +270,15 @@ Criterios de aceptación:
 - (a) Las cifras coinciden con los registros.
 - (b) Sin datos, el panel muestra ceros y no falla.
 
-Evidencia: pendiente (issue #12).
+Evidencia: issue #12. <!-- AGREGAR: número del pull request -->
+
+La web muestra, solo al coordinador, el «Panel de impacto» con tres cifras: préstamos completados, reparaciones resueltas y recursos reutilizados. Consulta `GET /impacto`; mientras carga muestra «Cargando impacto…» y, si falla, un mensaje con el botón «Reintentar». Se actualiza al registrar una devolución y al resolver una orden de reparación.
+
+- (a) La API lee la vista `v_panel_impacto`: cuenta las solicitudes `devuelta`, las órdenes `resuelta` y los recursos distintos con alguna solicitud `devuelta`. `db/04_tests.sql` compara las tres cifras con los registros. En la prueba visual con la cuenta de coordinación, el panel mostró 7 préstamos completados, 5 reparaciones resueltas y 4 recursos reutilizados, que son los datos de ese entorno.
+- (b) Sin datos, la vista devuelve ceros (`count(*)`) y la API devuelve ceros también si no llega ninguna fila (prueba en `impacto.service.spec.ts`).
+- Solo el coordinador: el solicitante y el propietario reciben 403 sin consultar la base (RNF-03).
+
+Archivos: `db/01_schema.sql` (vista), `api/src/impacto/` (módulo, controlador y servicio con `impacto.service.spec.ts`, 5 pruebas), `web/src/api.ts` (`obtenerImpacto`) y `web/src/App.tsx` (panel).
 
 ### HU-11: Retirar recurso por mantenimiento
 
@@ -281,7 +296,15 @@ Criterios de aceptación:
 - (a) Un recurso retirado no aparece en la búsqueda ni acepta solicitudes nuevas.
 - (b) Las solicitudes pendientes o confirmadas se conservan como "en espera por mantenimiento" y se reactivan al reincorporarlo.
 
-Evidencia: pendiente (issue #13).
+Evidencia: pull request #28 (issue #13).
+
+El coordinador ve la sección «Mantenimiento de recursos» con todos los recursos y su estado, y un botón por recurso: «Retirar por mantenimiento» o «Reincorporar».
+
+- (a) Un recurso `retirado` no sale en `buscar_recursos` (catálogo) y el trigger `trg_solicitud_insert` rechaza solicitudes nuevas con «El recurso está retirado por mantenimiento y no acepta solicitudes»; `aprobar_solicitud` también lo rechaza.
+- (b) `retirar_recurso` pasa las solicitudes pendientes y confirmadas a `en_espera_mantenimiento` guardando su estado anterior (`estado_previo`), y `reincorporar_recurso` las deja como estaban. En «Mis solicitudes» el solicitante las ve como «En espera por mantenimiento».
+- Un recurso averiado no se puede retirar: primero se resuelve su orden de reparación (si no, al reincorporarlo quedaría disponible sin haberse reparado). Hoy lo aplican `retirar_recurso` (error 400 en la API) y el botón deshabilitado de la web. Para una base ya creada, ejecutar `db/07_correcciones.sql`.
+
+Respaldo técnico: `api/src/recursos/` (rutas `GET /recursos/mantenimiento`, `PATCH /recursos/:id/retirar` y `PATCH /recursos/:id/reincorporar`, solo coordinador), pruebas en `recursos.pg.service.spec.ts` y `recursos.e2e-spec.ts`, y `db/04_tests.sql` (retiro, solicitudes conservadas y reactivadas, catálogo, y rechazo de retirar un recurso averiado).
 
 ## Trazabilidad: historia, pull request y prueba
 
@@ -293,12 +316,12 @@ Cada historia se integra mediante pull request revisado por un compañero del eq
 | HU-02: Consultar disponibilidad | #15 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-03: Solicitar préstamo | #18 | `npm test` (Vitest) y `npm run test:e2e` (supertest) |
 | HU-04: Aprobar o rechazar | #22 (issue #7) | `npm test` y `npm run test:e2e`; desarrollada con TDD (rojo, verde, refactor) |
-| HU-05: Registrar devolución | #24 (issue #8) | `npm test` y `npm run test:e2e` <!-- AJUSTAR: nombre de los archivos de prueba de HU-05 --> |
+| HU-05: Registrar devolución | #24 (issue #8) | `npm test` (bloque «registrar devolución (HU-05)» de `solicitudes.pg.service.spec.ts`); `db/04_tests.sql` |
 | HU-06: Reportar avería | #23 (issue #9) | `npm test` (4 pruebas en `recursos.averia.spec.ts`) y `npm run test:e2e` (`recursos.averias.e2e-spec.ts`) |
 | HU-07: Lista de espera | #25 (issue #10) | `npm test` (9 pruebas en `lista-espera.pg.service.spec.ts`) y `npm run test:e2e` (4 pruebas en `lista-espera.e2e-spec.ts`); `db/04_tests.sql` |
-| HU-08: Orden de reparación | #NN (issue #11) | `npm test` (31 pruebas en `ordenes-reparacion.pg.service.spec.ts`) y `npm run test:e2e` (6 pruebas en `ordenes-reparacion.e2e-spec.ts`); `db/04_tests.sql` |
-| HU-10: Panel de impacto | Pendiente (issue #12) | Pendiente |
-| HU-11: Retirar recurso por mantenimiento | Pendiente (issue #13) | Pendiente |
+| HU-08: Orden de reparación | #26 (issue #11) | `npm test` (31 pruebas en `ordenes-reparacion.pg.service.spec.ts`) y `npm run test:e2e` (6 pruebas en `ordenes-reparacion.e2e-spec.ts`); `db/04_tests.sql` |
+| HU-10: Panel de impacto | Issue #12 <!-- AGREGAR: número del PR --> | `npm test` (5 pruebas en `impacto.service.spec.ts`); `db/04_tests.sql` |
+| HU-11: Retirar recurso por mantenimiento | #28 (issue #13) | `npm test` (`recursos.pg.service.spec.ts`) y `npm run test:e2e` (`recursos.e2e-spec.ts`); `db/04_tests.sql` |
 
 Las tres primeras historias se migraron después a Supabase, con login y vistas por rol, en la rama `feature/integracion-supabase`. Las reglas de la base de datos tienen sus propias pruebas en `db/04_tests.sql`.
 
@@ -364,41 +387,12 @@ Dos workflows en `.github/workflows/`:
 - [x] HU-08: orden de reparación (PR #26)
 - [x] Base de datos en Supabase con reglas, permisos y pruebas (`db/`)
 - [x] Login con Supabase Auth y vistas por rol
-- [x] HU-01 a HU-08 conectadas de punta a punta: web, API y base de datos
-- [ ] HU-10: panel de impacto (issue #12). La base de datos ya tiene las funciones; faltan la API y la web
-- [ ] HU-11: retirar recurso por mantenimiento (issue #13). La base de datos ya tiene las funciones; faltan la API y la web
+- [x] HU-01 a HU-08, HU-10 y HU-11 conectadas de punta a punta: web, API y base de datos
+- [x] HU-10: panel de impacto (issue #12)
+- [x] HU-11: retirar recurso por mantenimiento (PR #28)
 - [x] Revisión de accesibilidad con Lighthouse (RNF-01)
 - [x] Integración continua con GitHub Actions (`ci.yml`)
 - [x] Despliegue de la web en AWS (S3 + CloudFront)
 - [x] Despliegue de la API en AWS Lambda detrás de CloudFront (`/api/*`)
 - [x] Automatizar el despliegue de la API en el pipeline (`deploy.yml`: imagen en ECR + Lambda)
 - [x] Verificar el certificado de la base de datos (`ssl` en `db.service.ts`)
-
-### HU-10: Panel de impacto
-
-Se implementó un panel de impacto visible para el coordinador. La pantalla consulta el endpoint `GET /impacto` y muestra tres cifras: préstamos completados, reparaciones resueltas y recursos reutilizados. Los datos se calculan a partir de los registros de solicitudes y órdenes de reparación mediante la vista `v_panel_impacto`.
-
-Si no hay registros, el panel muestra ceros. Si ocurre un error al cargar los datos, muestra un mensaje 
-
-### HU-10: Panel de impacto
-
-**Historia:** Como coordinador, quiero un panel con préstamos completados, reparaciones resueltas y recursos reutilizados para medir el impacto del sistema.
-
-**Implementación:** Se agregó un panel que solo se muestra a usuarios con rol de coordinador. La web consulta el endpoint autenticado `GET /impacto` y presenta tres indicadores: préstamos completados, reparaciones resueltas y recursos reutilizados. Mientras carga los datos, la pantalla muestra el estado de carga; si la petición falla, presenta un mensaje y permite reintentar.
-
-La API calcula los indicadores consultando la vista `v_panel_impacto` de PostgreSQL. La vista cuenta las solicitudes devueltas, las órdenes de reparación resueltas y los recursos distintos que aparecen en solicitudes devueltas. Si no hay registros, devuelve ceros. El endpoint restringe el acceso a la coordinación.
-
-**Archivos principales:**
-
-- `db/01_schema.sql`: definición de la vista `v_panel_impacto`.
-- `db/04_tests.sql`: comprobaciones SQL que comparan los indicadores con los registros.
-- `api/src/impacto/impacto.controller.ts`: endpoint `GET /impacto` y control de acceso.
-- `api/src/impacto/impacto.service.ts`: consulta de la vista y conversión de resultados.
-- `api/src/impacto/impacto.service.spec.ts`: pruebas del servicio y permisos.
-- `api/src/app.module.ts`: registro del módulo de impacto.
-- `web/src/api.ts`: tipo y función para consultar el endpoint.
-- `web/src/App.tsx` y `web/src/App.css`: carga, visualización y estilos del panel.
-
-**Verificación:** Se ejecutó `npm test -- impacto.service.spec.ts`. Resultado: **5 pruebas aprobadas**. Estas verifican que el servicio devuelva las cifras recibidas, que responda con ceros cuando no hay filas y que solo el coordinador pueda consultar el panel.
-
-En la prueba visual con una cuenta coordinadora, el panel mostró **7 préstamos completados, 5 reparaciones resueltas y 4 recursos reutilizados**. Estas cifras corresponden a los datos existentes en el entorno usado para la captura.

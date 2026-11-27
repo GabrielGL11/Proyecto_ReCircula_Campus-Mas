@@ -261,7 +261,7 @@ create trigger ordenes_validar before update of estado on ordenes_reparacion
 -- HU-08 (c) y (d): historial con fecha y responsable; al resolver, el recurso vuelve a estar disponible
 create or replace function trg_orden_historial() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare actor bigint := app_actor();
+declare actor bigint := app_actor(); v_recurso bigint;
 begin
   if actor is null then
     raise exception 'Se requiere un usuario para registrar el cambio de estado' using errcode = '42501';
@@ -273,9 +273,11 @@ begin
     insert into historial_orden(orden_id, estado_anterior, estado_nuevo, cambiado_por)
     values (new.id, old.estado, new.estado, actor);
     if new.estado = 'resuelta' then
+      select a.recurso_id into v_recurso from averias a where a.id = new.averia_id;
       update recursos set estado = 'disponible'
-       where id = (select a.recurso_id from averias a where a.id = new.averia_id)
-         and estado = 'averiado';
+       where id = v_recurso and estado = 'averiado';
+      -- Si el recurso se devolvió mientras estaba averiado, la lista de espera quedó sin promover.
+      perform promover_lista_espera(v_recurso);
     end if;
   end if;
   return null;
@@ -542,6 +544,10 @@ begin
   if r.estado = 'retirado' then
     raise exception 'El recurso ya está retirado por mantenimiento' using errcode = '23514';
   end if;
+  if r.estado = 'averiado' then
+    raise exception 'El recurso está averiado: resuelva su orden de reparación antes de retirarlo por mantenimiento'
+      using errcode = '23514';
+  end if;
   update recursos set estado = 'retirado' where id = p_recurso returning * into r;
   update solicitudes set estado_previo = estado, estado = 'en_espera_mantenimiento'
    where recurso_id = p_recurso and estado in ('pendiente','confirmada');
@@ -565,6 +571,7 @@ begin
   update recursos set estado = 'disponible' where id = p_recurso returning * into r;
   update solicitudes set estado = estado_previo, estado_previo = null
    where recurso_id = p_recurso and estado = 'en_espera_mantenimiento';
+  perform promover_lista_espera(p_recurso);
   return r;
 end $$;
 

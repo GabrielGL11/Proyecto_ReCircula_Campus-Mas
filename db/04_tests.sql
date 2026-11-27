@@ -123,8 +123,6 @@ begin
     perform aprobar_solicitud(p2);
     perform recircula_espera_error(format('select retirar_recurso(%s)', r3), 'coordinador', '42501');
     perform set_config('app.actor', coord::text, true);
-    perform reportar_averia(r3, 'Revisión de la HU-11');
-    assert (select estado from recursos where id = r3) = 'averiado', 'HU-06: se registra la avería';
     perform retirar_recurso(r3);
     assert (select count(*) from solicitudes where recurso_id = r3 and estado = 'en_espera_mantenimiento') = 2, 'HU-11(b): las solicitudes se conservan';
     assert not exists (select 1 from buscar_recursos(null, null, null) where id = r3), 'HU-11(a): no aparece en la búsqueda';
@@ -136,6 +134,13 @@ begin
     assert (select estado from solicitudes where id = p2) = 'confirmada', 'HU-11(b): la confirmada se reactiva';
     assert exists (select 1 from buscar_recursos(null, null, null) where id = r3), 'vuelve al catálogo al reincorporarlo';
     raise notice 'OK  HU-11: retiro por mantenimiento sin perder solicitudes';
+
+    -- Un recurso averiado no se retira: primero se resuelve su orden de reparación
+    perform reportar_averia(r3, 'Revisión de la HU-11');
+    assert (select estado from recursos where id = r3) = 'averiado', 'HU-06: se registra la avería';
+    perform recircula_espera_error(format('select retirar_recurso(%s)', r3), 'averiado', '23514');
+    assert (select estado from recursos where id = r3) = 'averiado', 'HU-11: el recurso averiado sigue averiado';
+    raise notice 'OK  HU-11: un recurso averiado no se puede retirar';
 
     -- ---------- HU-10: el panel coincide con los registros ----------
     select * into v from v_panel_impacto;

@@ -14,8 +14,11 @@ Se ejecutan en el **SQL Editor** de Supabase, cada uno en una consulta nueva (bo
 | 2 | `02_supabase_adapter.sql` | Vincula con Supabase Auth, activa RLS y limita permisos |
 | 3 | `03_seed_demo.sql` | Datos ficticios y el escenario de la demo (opcional) |
 | 4 | `04_tests.sql` | Pruebas de las reglas (opcional) |
+| 5 | `05_security_hardening.sql` | Endurece la seguridad (vistas con `security_invoker`, `search_path` de las funciones) |
+| 6 | `06_mantenimiento.sql` | Solo para instalaciones anteriores a la HU-11 (el `01` ya lo incluye) |
+| 7 | `07_correcciones.sql` | Solo para instalaciones anteriores a esta corrección (el `01` ya la incluye): no retirar recursos averiados y promover la lista de espera al reparar o reincorporar |
 
-Para una instalación existente, ejecuta `06_mantenimiento.sql` antes de desplegar la API de la HU-11. El esquema `01_schema.sql` ya incluye estos cambios para instalaciones nuevas.
+Para una instalación existente, ejecuta `06_mantenimiento.sql` antes de desplegar la API de la HU-11 y después `07_correcciones.sql`. El esquema `01_schema.sql` ya incluye estos cambios para instalaciones nuevas.
 
 Notas de ejecución:
 

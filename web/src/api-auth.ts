@@ -36,6 +36,8 @@ export async function apiFetch<T>(ruta: string, opciones: RequestInit = {}): Pro
     } catch {
       /* la respuesta no era JSON: se deja el mensaje genérico */
     }
+    // Un error 5xx es del servidor (p. ej. "Internal server error", en inglés): no se le enseña a la persona.
+    if (respuesta.status >= 500) mensajes = ['Ocurrió un error en el servidor. Inténtalo de nuevo en unos minutos.'];
     throw new ErrorApi(respuesta.status, mensajes);
   }
   return (respuesta.status === 204 ? undefined : await respuesta.json()) as T;

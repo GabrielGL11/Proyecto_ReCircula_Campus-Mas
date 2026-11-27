@@ -607,9 +607,12 @@ export default function App() {
           <h2 id="titulo-impacto">Panel de impacto</h2>
           {cargandoImpacto && <p role="status">Cargando impacto…</p>}
           {errorImpacto && (
-            <p role="alert" className="mensaje error">
-              No se pudo cargar el panel de impacto.
-            </p>
+            <div role="alert" className="mensaje error">
+              <p>No se pudo cargar el panel de impacto.</p>
+              <button type="button" disabled={cargandoImpacto} onClick={() => void cargarImpacto()}>
+                Reintentar
+              </button>
+            </div>
           )}
           {!cargandoImpacto && !errorImpacto && impacto && (
             <div className="panel-impacto">
@@ -1050,10 +1053,13 @@ export default function App() {
                 <li key={r.id}>
                   <strong>{r.nombre} (n.º {r.id})</strong>
                   <span className={`estado ${r.estado}`}>{ESTADO_MANTENIMIENTO[r.estado]}</span>
-                  <button type="button" disabled={gestionandoRecurso !== null}
+                  <button type="button" disabled={gestionandoRecurso !== null || r.estado === 'averiado'}
                     onClick={() => void gestionarMantenimiento(r)}>
                     {r.estado === 'retirado' ? 'Reincorporar' : 'Retirar por mantenimiento'}
                   </button>
+                  {r.estado === 'averiado' && (
+                    <small className="detalle">Resuelve su orden de reparación para poder retirarlo.</small>
+                  )}
                 </li>
               ))}
             </ul>
