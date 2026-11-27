@@ -42,6 +42,14 @@ export function listarRecursos(filtros: Filtros = {}): Promise<Recurso[]> {
   return conMensajes(apiFetch<Recurso[]>(`/recursos${consulta ? `?${consulta}` : ''}`))
 }
 
+export function listarRecursosParaMantenimiento(): Promise<Recurso[]> {
+  return conMensajes(apiFetch<Recurso[]>('/recursos/mantenimiento'))
+}
+
+export function cambiarMantenimiento(id: number, accion: 'retirar' | 'reincorporar'): Promise<Recurso> {
+  return conMensajes(apiFetch<Recurso>(`/recursos/${id}/${accion}`, { method: 'PATCH' }))
+}
+
 // El propietario sale del token en la API: ya no se manda propietarioId.
 export function publicarRecurso(datos: { nombre: string; categoria: string }): Promise<Recurso> {
   return conMensajes(apiFetch<Recurso>('/recursos', { method: 'POST', body: JSON.stringify(datos) }))

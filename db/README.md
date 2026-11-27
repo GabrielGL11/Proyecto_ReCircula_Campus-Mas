@@ -15,6 +15,8 @@ Se ejecutan en el **SQL Editor** de Supabase, cada uno en una consulta nueva (bo
 | 3 | `03_seed_demo.sql` | Datos ficticios y el escenario de la demo (opcional) |
 | 4 | `04_tests.sql` | Pruebas de las reglas (opcional) |
 
+Para una instalación existente, ejecuta `06_mantenimiento.sql` antes de desplegar la API de la HU-11. El esquema `01_schema.sql` ya incluye estos cambios para instalaciones nuevas.
+
 Notas de ejecución:
 
 - Si el editor muestra el aviso *Potential issues detected*, elige **Run and enable RLS**.

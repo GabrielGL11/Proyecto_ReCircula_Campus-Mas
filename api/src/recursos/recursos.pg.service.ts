@@ -55,6 +55,43 @@ export class RecursosPgService {
     }
   }
 
+  async listarParaMantenimiento(usuario: Usuario): Promise<Recurso[]> {
+    this.exigirCoordinador(usuario);
+    const { rows } = await this.db.query<Recurso>(
+      `select id, nombre, categoria, estado, propietario_id as "propietarioId"
+         from recursos order by nombre, id`,
+    );
+    return rows;
+  }
+
+  async cambiarMantenimiento(
+    id: number,
+    accion: 'retirar' | 'reincorporar',
+    usuario: Usuario,
+  ): Promise<Recurso> {
+    this.exigirCoordinador(usuario);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new BadRequestException(['Indica un recurso válido.']);
+
+    const funcion = accion === 'retirar' ? 'retirar_recurso' : 'reincorporar_recurso';
+    try {
+      return await this.db.comoActor(usuario.id, async (cliente) => {
+        const { rows } = await cliente.query<Recurso>(
+          `select id, nombre, categoria, estado, propietario_id as "propietarioId" from ${funcion}($1)`,
+          [id],
+        );
+        return rows[0];
+      });
+    } catch (error) {
+      throw traducirErrorDb(error);
+    }
+  }
+
+  private exigirCoordinador(usuario: Usuario): void {
+    if (usuario.rol !== 'coordinador') {
+      throw new ForbiddenException(['Solo el coordinador puede gestionar el mantenimiento.']);
+    }
+  }
+
   async reportarAveria(id: number, datos: ReportarAveriaDto | undefined, usuario: Usuario): Promise<Averia> {
     const descripcion = typeof datos?.descripcion === 'string' ? datos.descripcion.trim() : '';
     if (!descripcion) throw new BadRequestException(['Describe la avería.']);

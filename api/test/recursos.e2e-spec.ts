@@ -13,8 +13,12 @@ import { RecursosService, type FiltrosRecursos } from './../src/recursos/recurso
 describe('Recursos (e2e)', () => {
   let app: INestApplication<App>;
   let servicio: RecursosService;
+  const listarParaMantenimiento = vi.fn();
+  const cambiarMantenimiento = vi.fn();
 
   beforeEach(async () => {
+    listarParaMantenimiento.mockReset();
+    cambiarMantenimiento.mockReset();
     const memoria = new RecursosService();
     const usuarioFalso = { id: 1, nombre: 'Carlos Vaca', rol: 'propietario' };
 
@@ -32,6 +36,8 @@ describe('Recursos (e2e)', () => {
       .useValue({
         crear: async (datos: object | undefined) => memoria.crear({ ...datos, propietarioId: usuarioFalso.id }),
         listar: async (filtros: FiltrosRecursos) => memoria.listar(filtros),
+        listarParaMantenimiento,
+        cambiarMantenimiento,
       })
       .compile();
 
@@ -66,6 +72,21 @@ describe('Recursos (e2e)', () => {
 
     it('responde 400 si no se envía body', async () => {
       await request(app.getHttpServer()).post('/recursos').expect(400);
+    });
+  });
+
+  describe('Rutas de mantenimiento (HU-11)', () => {
+    it('pasa el usuario autenticado al listado del coordinador', async () => {
+      listarParaMantenimiento.mockResolvedValue([{ id: 6, estado: 'retirado' }]);
+      const res = await request(app.getHttpServer()).get('/recursos/mantenimiento').expect(200);
+      expect(res.body).toEqual([{ id: 6, estado: 'retirado' }]);
+      expect(listarParaMantenimiento).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+    });
+
+    it.each(['retirar', 'reincorporar'])('pasa el id y el usuario autenticado al %s', async (accion) => {
+      cambiarMantenimiento.mockResolvedValue({ id: 6 });
+      await request(app.getHttpServer()).patch(`/recursos/6/${accion}`).expect(200);
+      expect(cambiarMantenimiento).toHaveBeenCalledWith(6, accion, expect.objectContaining({ id: 1 }));
     });
   });
 

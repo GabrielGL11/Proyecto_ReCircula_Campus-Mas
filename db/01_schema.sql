@@ -193,7 +193,8 @@ begin
   if new.fin < new.inicio then                                   -- R2
     raise exception 'La fecha de fin no puede ser anterior a la de inicio' using errcode = '23514';
   end if;
-  select * into r from recursos where id = new.recurso_id;
+  -- Serializa la creación con el retiro y la reincorporación.
+  select * into r from recursos where id = new.recurso_id for share;
   if not found then
     raise exception 'El recurso % no existe', new.recurso_id using errcode = 'P0002';
   end if;
@@ -335,11 +336,16 @@ create or replace function aprobar_solicitud(p_solicitud bigint) returns solicit
 language plpgsql security definer set search_path = public as $$
 declare actor bigint := exigir_actor(); s solicitudes; r recursos;
 begin
+  -- El mantenimiento bloquea primero el recurso y luego sus solicitudes.
+  select * into r from recursos
+   where id = (select recurso_id from solicitudes where id = p_solicitud) for update;
+  if not found then
+    raise exception 'La solicitud % no existe', p_solicitud using errcode = 'P0002';
+  end if;
   select * into s from solicitudes where id = p_solicitud for update;
   if not found then
     raise exception 'La solicitud % no existe', p_solicitud using errcode = 'P0002';
   end if;
-  select * into r from recursos where id = s.recurso_id for update;
   if not (r.propietario_id = actor or es_coordinador()) then          -- R3
     raise exception 'Solo el propietario o el coordinador pueden aprobar una solicitud'
       using errcode = '42501';
@@ -391,7 +397,7 @@ create or replace function promover_lista_espera(p_recurso bigint) returns bigin
 language plpgsql security definer set search_path = public as $$
 declare e lista_espera; nueva bigint;
 begin
-  if (select estado from recursos where id = p_recurso) is distinct from 'disponible' then
+  if (select estado from recursos where id = p_recurso for share) is distinct from 'disponible' then
     return null;
   end if;
   select le.* into e from lista_espera le
@@ -416,6 +422,12 @@ declare actor bigint := exigir_actor(); s solicitudes;
 begin
   if not es_coordinador() then
     raise exception 'Solo el coordinador puede registrar la devolución' using errcode = '42501';
+  end if;
+  -- Mantiene el orden de bloqueos al promover una entrada de lista de espera.
+  perform 1 from recursos
+   where id = (select recurso_id from solicitudes where id = p_solicitud) for update;
+  if not found then
+    raise exception 'La solicitud % no existe', p_solicitud using errcode = 'P0002';
   end if;
   select * into s from solicitudes where id = p_solicitud for update;
   if not found then
@@ -444,7 +456,7 @@ begin
   if p_fin < p_inicio then
     raise exception 'La fecha de fin no puede ser anterior a la de inicio' using errcode = '23514';
   end if;
-  select * into r from recursos where id = p_recurso;
+  select * into r from recursos where id = p_recurso for share;
   if not found then
     raise exception 'El recurso % no existe', p_recurso using errcode = 'P0002';
   end if;
@@ -527,9 +539,8 @@ begin
   if not found then
     raise exception 'El recurso % no existe', p_recurso using errcode = 'P0002';
   end if;
-  if r.estado <> 'disponible' then
-    raise exception 'Solo se puede retirar un recurso disponible (estado actual: %)', r.estado
-      using errcode = '23514';
+  if r.estado = 'retirado' then
+    raise exception 'El recurso ya está retirado por mantenimiento' using errcode = '23514';
   end if;
   update recursos set estado = 'retirado' where id = p_recurso returning * into r;
   update solicitudes set estado_previo = estado, estado = 'en_espera_mantenimiento'

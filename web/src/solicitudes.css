@@ -50,7 +50,7 @@
 .estado.confirmada { background: #f1f8f4; color: #1d5a37; border-color: #b7d9c4; }
 .estado.rechazada { background: #fdf3f3; color: #7a1c20; border-color: #e3b5b7; }
 .estado.devuelta { background: var(--superficie); color: var(--text); border-color: var(--border); }
-.estado.en_espera { background: #f3f0ff; color: #5b21b6; border-color: #ddd6fe; }
+.estado.en_espera, .estado.en_espera_mantenimiento { background: #f3f0ff; color: #5b21b6; border-color: #ddd6fe; }
 .estado.promovida { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
 .estado.cancelada { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
 .estado.abierta { background: #fff8e6; color: #7a5200; border-color: #e6cf8f; }
