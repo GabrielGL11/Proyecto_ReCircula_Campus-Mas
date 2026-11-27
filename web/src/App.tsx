@@ -19,6 +19,7 @@ import {
   listarRecursos,
   listarRecursosParaMantenimiento,
   listarSolicitudes,
+  obtenerImpacto,
   obtenerUsuario,
   publicarRecurso,
   rechazarSolicitud,
@@ -30,10 +31,10 @@ import {
   type EstadoOrden,
   type Filtros,
   type OrdenReparacion,
+  type PanelImpacto,
   type Recurso,
   type Solicitud,
   type Usuario,
-import {CATEGORIAS,abrirOrden,anotarEnListaEspera,aprobarSolicitud,avanzarOrden,cancelarListaEspera,crearSolicitud,listarAveriasSinOrden,listarConfirmadas,listarHistorialOrden,listarListaEspera,listarOrdenes,listarPendientes,listarRecursos,listarSolicitudes,obtenerImpacto,obtenerUsuario,publicarRecurso,rechazarSolicitud,registrarDevolucion,reportarAveria,type AveriaSinOrden,type CambioEstadoOrden,type EntradaEspera,type EstadoOrden,type Filtros,type OrdenReparacion,type PanelImpacto,type Recurso,type Solicitud,type Usuario,
 } from './api.ts'
 import { useSesion } from './auth/sesion.ts'
 
