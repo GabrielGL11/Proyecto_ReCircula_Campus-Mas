@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard, type Usuario } from '../auth/auth.guard.js';
 import { UsuarioActual } from '../auth/usuario.decorator.js';
 import type { CrearRecursoDto, ReportarAveriaDto } from './recurso.js';
@@ -23,6 +23,21 @@ export class RecursosController {
     @Query('hasta') hasta?: string,
   ) {
     return this.recursos.listar({ categoria, desde, hasta });
+  }
+
+  @Get('mantenimiento')
+  listarParaMantenimiento(@UsuarioActual() usuario: Usuario) {
+    return this.recursos.listarParaMantenimiento(usuario);
+  }
+
+  @Patch(':id/retirar')
+  retirar(@Param('id', ParseIntPipe) id: number, @UsuarioActual() usuario: Usuario) {
+    return this.recursos.cambiarMantenimiento(id, 'retirar', usuario);
+  }
+
+  @Patch(':id/reincorporar')
+  reincorporar(@Param('id', ParseIntPipe) id: number, @UsuarioActual() usuario: Usuario) {
+    return this.recursos.cambiarMantenimiento(id, 'reincorporar', usuario);
   }
 
   @Post(':id/averias')

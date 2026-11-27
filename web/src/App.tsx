@@ -8,6 +8,7 @@ import {
   aprobarSolicitud,
   avanzarOrden,
   cancelarListaEspera,
+  cambiarMantenimiento,
   crearSolicitud,
   listarAveriasSinOrden,
   listarConfirmadas,
@@ -16,6 +17,7 @@ import {
   listarOrdenes,
   listarPendientes,
   listarRecursos,
+  listarRecursosParaMantenimiento,
   listarSolicitudes,
   obtenerUsuario,
   publicarRecurso,
@@ -55,6 +57,12 @@ const SIGUIENTE_ORDEN: Record<EstadoOrden, { estado: EstadoOrden; boton: string 
   resuelta: null,
 }
 
+const ESTADO_MANTENIMIENTO: Record<Recurso['estado'], string> = {
+  disponible: 'Disponible',
+  averiado: 'Averiado',
+  retirado: 'Retirado por mantenimiento',
+}
+
 export default function App() {
   const { session, cerrarSesion } = useSesion()
 
@@ -68,6 +76,43 @@ export default function App() {
   const [recursos, setRecursos] = useState<Recurso[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null)
+
+  const [recursosMantenimiento, setRecursosMantenimiento] = useState<Recurso[]>([])
+  const [cargandoMantenimiento, setCargandoMantenimiento] = useState(true)
+  const [gestionandoRecurso, setGestionandoRecurso] = useState<number | null>(null)
+  const [errorMantenimiento, setErrorMantenimiento] = useState<string | null>(null)
+  const [mensajeMantenimiento, setMensajeMantenimiento] = useState<string | null>(null)
+
+  async function cargarMantenimiento() {
+    setCargandoMantenimiento(true)
+    setErrorMantenimiento(null)
+    try {
+      setRecursosMantenimiento(await listarRecursosParaMantenimiento())
+    } catch {
+      setErrorMantenimiento('No se pudieron cargar los recursos para mantenimiento.')
+    } finally {
+      setCargandoMantenimiento(false)
+    }
+  }
+
+  async function gestionarMantenimiento(recurso: Recurso) {
+    const reincorporar = recurso.estado === 'retirado'
+    setGestionandoRecurso(recurso.id)
+    setErrorMantenimiento(null)
+    setMensajeMantenimiento(null)
+    try {
+      const actualizado = await cambiarMantenimiento(recurso.id, reincorporar ? 'reincorporar' : 'retirar')
+      setRecursosMantenimiento((lista) => lista.map((r) => r.id === actualizado.id ? actualizado : r))
+      setMensajeMantenimiento(reincorporar
+        ? `«${recurso.nombre}» reincorporado.`
+        : `«${recurso.nombre}» retirado por mantenimiento.`)
+      await Promise.all([cargar(filtrosAplicados.current), cargarPendientes(), cargarConfirmadas()])
+    } catch (err) {
+      setErrorMantenimiento(Array.isArray(err) ? err.join(' ') : 'No se pudo actualizar el mantenimiento.')
+    } finally {
+      setGestionandoRecurso(null)
+    }
+  }
 
   // Formulario de publicación (HU-01)
   const [nombre, setNombre] = useState('')
@@ -238,6 +283,7 @@ export default function App() {
       )
       await Promise.all([
         cargarOrdenes(),
+        cargarMantenimiento(),
         cargar(filtrosAplicados.current),
         historialAbierto === orden.id ? cargarHistorial(orden.id) : Promise.resolve(),
       ])
@@ -396,7 +442,7 @@ export default function App() {
       setRecursoAveria(null)
       setDescripcionAveria('')
       await cargar(filtrosActivos ? { categoria: filtroCategoria, desde, hasta } : {})
-      if (puedeGestionarOrdenes) void cargarOrdenes()
+      if (puedeGestionarOrdenes) await Promise.all([cargarOrdenes(), cargarMantenimiento()])
     } catch (err) {
       setErroresAveria(Array.isArray(err) ? (err as string[]) : ['No se pudo reportar la avería.'])
     } finally {
@@ -468,7 +514,10 @@ export default function App() {
   }, [puedeDevolver])
 
   useEffect(() => {
-    if (puedeGestionarOrdenes) void cargarOrdenes()
+    if (puedeGestionarOrdenes) {
+      void cargarOrdenes()
+      void cargarMantenimiento()
+    }
   }, [puedeGestionarOrdenes])
 
   async function enviar(e: FormEvent) {
@@ -483,6 +532,7 @@ export default function App() {
       setNombre('')
       setCategoria('')
       await cargar(filtrosActivos ? { categoria: filtroCategoria, desde, hasta } : {})
+      if (puedeGestionarOrdenes) await cargarMantenimiento()
     } catch (err) {
       setErrores(Array.isArray(err) ? (err as string[]) : ['No se pudo publicar el recurso.'])
     } finally {
@@ -934,6 +984,32 @@ export default function App() {
       )}
 
       {puedeGestionarOrdenes && (
+        <section aria-labelledby="titulo-mantenimiento">
+          <h2 id="titulo-mantenimiento">Mantenimiento de recursos</h2>
+          {mensajeMantenimiento && <p role="status">{mensajeMantenimiento}</p>}
+          {errorMantenimiento && <p role="alert">{errorMantenimiento}</p>}
+          <button type="button" disabled={cargandoMantenimiento || gestionandoRecurso !== null}
+            onClick={() => void cargarMantenimiento()}>
+            Actualizar recursos
+          </button>
+          {cargandoMantenimiento ? <p role="status">Cargando recursos…</p> : (
+            <ul className="catalogo">
+              {recursosMantenimiento.map((r) => (
+                <li key={r.id}>
+                  <strong>{r.nombre} (n.º {r.id})</strong>
+                  <span className={`estado ${r.estado}`}>{ESTADO_MANTENIMIENTO[r.estado]}</span>
+                  <button type="button" disabled={gestionandoRecurso !== null}
+                    onClick={() => void gestionarMantenimiento(r)}>
+                    {r.estado === 'retirado' ? 'Reincorporar' : 'Retirar por mantenimiento'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {puedeGestionarOrdenes && (
         <section aria-labelledby="titulo-ordenes">
           <h2 id="titulo-ordenes">Órdenes de reparación</h2>
           {cargandoOrdenes && <p role="status">Cargando órdenes…</p>}
@@ -1087,7 +1163,7 @@ export default function App() {
                     {s.fechaDevolucionReal && (
                       <span className="categoria">Devuelto el {formatoFecha(s.fechaDevolucionReal)}</span>
                     )}
-                    <span className={`estado ${s.estado}`}>{s.estado.replaceAll('_', ' ')}</span>
+                    <span className={`estado ${s.estado}`}>{s.estado === 'en_espera_mantenimiento' ? 'En espera por mantenimiento' : s.estado.replaceAll('_', ' ')}</span>
                   </div>
                 </li>
               ))}

@@ -93,3 +93,31 @@ describe('RecursosPgService: consultar disponibilidad (HU-02)', () => {
     expect(query).not.toHaveBeenCalled();
   });
 });
+
+describe('RecursosPgService: mantenimiento (HU-11)', () => {
+  const coordinador: Usuario = { id: 1, nombre: 'Coordinador', rol: 'coordinador' };
+
+  it('reserva la consulta y ambas acciones al coordinador', async () => {
+    const { db, query, comoActor } = crearDbFalsa();
+    const service = new RecursosPgService(db);
+
+    await expect(service.listarParaMantenimiento(carlos)).rejects.toThrow(ForbiddenException);
+    await expect(service.cambiarMantenimiento(6, 'retirar', carlos)).rejects.toThrow(ForbiddenException);
+    await expect(service.cambiarMantenimiento(6, 'reincorporar', ana)).rejects.toThrow(ForbiddenException);
+    expect(query).not.toHaveBeenCalled();
+    expect(comoActor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['retirar', 'retirado'],
+    ['reincorporar', 'disponible'],
+  ] as const)('ejecuta %s como coordinador y devuelve el recurso', async (accion, estado) => {
+    const { db, comoActor, clienteQuery, casio } = crearDbFalsa();
+    const recurso = { ...casio, estado };
+    clienteQuery.mockResolvedValueOnce({ rows: [recurso] });
+
+    await expect(new RecursosPgService(db).cambiarMantenimiento(6, accion, coordinador)).resolves.toEqual(recurso);
+    expect(comoActor).toHaveBeenCalledWith(coordinador.id, expect.any(Function));
+    expect(clienteQuery).toHaveBeenCalledWith(expect.stringContaining(accion + '_recurso($1)'), [6]);
+  });
+});
